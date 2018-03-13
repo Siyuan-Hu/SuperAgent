@@ -24,6 +24,9 @@ class QNetwork():
 		# Helper funciton to load model weights. 
 		pass
 
+	def get_weight():
+		pass
+
 class Replay_Memory():
 
 	def __init__(self, memory_size=50000, burn_in=10000):
