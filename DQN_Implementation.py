@@ -27,23 +27,29 @@ class QNetwork():
 class Replay_Memory():
 
 	def __init__(self, memory_size=50000, burn_in=10000):
-
+		import collections
 		# The memory essentially stores transitions recorder from the agent
 		# taking actions in the environment.
 
 		# Burn in episodes define the number of episodes that are written into the memory from the 
 		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
 		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
-		pass
+		self.memory_size = memory_size
+		self.burn_in = burn_in
+		self.memory = collections.deque(maxlen=memory_size)
 
 	def sample_batch(self, batch_size=32):
 		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
 		# You will feed this to your model to train.
-		pass
+		current_memory_size = len(self.memory)
+		sample_index = np.random.choice(current_memory_size,
+										size=batch_size)
+		samples = [self.memory[idx] for idx in sample_index]
+		return np.array(samples)
 
 	def append(self, transition):
 		# Appends transition to the memory. 	
-		pass
+		self.memory.append(transition)
 
 class DQN_Agent():
 
