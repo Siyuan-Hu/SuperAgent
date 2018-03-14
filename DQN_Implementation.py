@@ -74,7 +74,7 @@ class QNetwork():
 
 	def create_optimizer(self):
 		# Using Adam to minimize the error between target and evaluation
-		if self.actor_mimic:
+		if self.is_actor_mimic:
 			cost = self.actor_mimic_cost()
 		else:
 			cost = self.dqn_cost()
@@ -110,16 +110,26 @@ class QNetwork():
 		return (distribution/dist_sum).eval(feed_dict = {self.state_input : state_batch})
 
 	def get_q_values(self, state):
-		return self.q_values.eval(feed_dict = {self.state_input : state})[0]
+		return self.q_values.eval(feed_dict = {self.state_input : [state]})[0]
 
 
-	def save_model(self, suffix):
-		# Helper function to save your model / weights. 
-		pass
+	def save_model(self, suffix, step):
+		# Helper function to save your model.
+		saver = tf.train.Saver()
+		tf.add_to_collection("optimizer", self.optimizer)
+		saver.save(self.session, suffix, global_step = step)
 
 	def load_model(self, model_file):
 		# Helper function to load an existing model.
-		pass
+		saver = tf.train.import_meta_graph(model_file + '.meta')
+		saver.restore(self.session, model_file)
+
+		graph = tf.get_default_graph()
+		self.q_values = graph.get_tensor_by_name("q_values:0")
+		self.state_input = graph.get_tensor_by_name("state_input:0")
+		self.action_input = graph.get_tensor_by_name("action_input:0")
+		self.target_q_value = graph.get_tensor_by_name("target_q_value:0")
+		self.optimizer = tf.get_collection("optimizer")[0]
 
 	def get_weight(self):
 		return self.w2, self.b2
