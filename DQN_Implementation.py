@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import keras, tensorflow as tf, numpy as npy, gym, sys, copy, argparse
+import keras, tensorflow as tf, numpy as npy, gym, sys, copy, argparse, random
 
 class MultitaskNetwork(object):
 	def __init__(self, source_environment_names, target_environment_name):
@@ -176,28 +176,103 @@ class DQN_Agent():
 		# Here is also a good place to set environmental parameters,
 		# as well as training parameters - number of episodes / iterations, etc. 
 
-		pass 
+		self.environment_name = environment_name
+		self.q_network = QNetwork(environment_name)
+		self.replay_memory = Replay_Memory()
+		self.env = gym.make(environment_name)
+		self.action_dim = self.env.action_space.n
+		self.epsilon = 0.5
+		self.gamma = 0.99
 
-	def epsilon_greedy_policy(self, q_values):
-		# Creating epsilon greedy probabilities to sample from.             
-		pass
+		# max episode to train
+		self.episode = 1000000
+
+
+	def epsilon_greedy_policy(self, q_values, epsilon):
+		# Creating epsilon greedy probabilities to sample from.     
+		if random.random() <= epsilon:
+			return random.randint(0, self.env.action_space.n - 1)
+		else:
+			return self.greedy_policy(q_values)
 
 	def greedy_policy(self, q_values):
-		# Creating greedy policy for test time. 
-		pass 
+		# Creating greedy policy for test time.
+		return npy.argmax(q_values)
 
 	def train(self):
 		# In this function, we will train our network. 
-		# If training without experience replay_memory, then you will interact with the environment 
-		# in this function, while also updating your network parameters. 
 
-		# If you are using a replay memory, you should interact with environment here, and store these 
-		# transitions to memory, while also updating your model.
-		pass
+		for i_episode in range(self.episode):
+			state = self.env.reset()
 
-	def test(self, model_file=None):
+			q_values = self.q_network.get_q_values(state)
+
+			for t in range(100000):
+				action = self.epsilon_greedy_policy(q_values, self.epsilon)
+
+				# Decay the epsilon
+				if (self.epsilon > 0.01):
+					self.epsilon -= (0.5 - 0.01) / 100000
+
+				next_state, reward, done, info = self.env.step(action)
+
+				# Transform action to one hot
+				action_input = npy.zeros(self.action_dim)
+				action_input[action] = 1
+
+				next_state_q_values = self.q_network.get_q_values(next_state)
+
+				target = reward
+				# If it's not terminal state, calculate the target. 
+				if not done:
+					target += self.gamma * next_state_q_values[self.greedy_policy(next_state_q_values)]
+
+				# Train
+				batch = self.replay_memory.sample_batch()
+				state_batch = [state]
+				action_batch = [action_input]
+				target_batch = [target]
+
+				self.q_network.update_dqn(state_batch, action_batch, target_batch)
+			
+				state = next_state
+				q_values = next_state_q_values
+
+				if done:
+					break
+
+			if i_episode % 200 == 0:
+				self.test()
+
+	def test(self):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
+
+		episode_num = 20
+		total_reward = 0
+
+		env = gym.make(self.environment_name)
+
+
+		for i in range(episode_num):
+			state = env.reset()
+
+			for t in range(100000):
+				q_values = self.q_network.get_q_values(state)
+
+				env.render()
+				action = self.epsilon_greedy_policy(q_values, 0.01)
+
+				state, reward, done, info = env.step(action)
+
+				total_reward += reward
+
+				if done:
+					break
+		ave_reward = total_reward / episode_num
+		print 'Evaluation Average Reward:',ave_reward
+		env.close()
+		return ave_reward
 
 	def burn_in_memory():
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
@@ -214,18 +289,9 @@ def parse_arguments():
 
 def main(args):
 
-	args = parse_arguments()
-	environment_name = args.env
-
-	# Setting the session to allow growth, so it doesn't allocate all GPU memory. 
-	gpu_ops = tf.GPUOptions(allow_growth=True)
-	config = tf.ConfigProto(gpu_options=gpu_ops)
-	sess = tf.Session(config=config)
-
-	# Setting this as the default tensorflow session. 
-	keras.backend.tensorflow_backend.set_session(sess)
-
-	# You want to create an instance of the DQN_Agent class here, and then train / test it. 
+	environment_name = "CartPole-v0"
+	agent = DQN_Agent(environment_name)
+	agent.train()
 
 if __name__ == '__main__':
 	main(sys.argv)
