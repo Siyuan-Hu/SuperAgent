@@ -1,6 +1,20 @@
 #!/usr/bin/env python
 import keras, tensorflow as tf, numpy as npy, gym, sys, copy, argparse
 
+class MultitaskNetwork(object):
+	def __init__(self, source_environment_names, target_environment_name):
+		source_networks = []
+		for environment_name in source_environment_names:
+			source_networks.append(QNetwork(environment_name, True))
+		target_network = QNetwork(target_environment_name, False)
+
+	def synchronize_network(self, w, b):
+		for network in source_networks:
+			network.set_weight(w, b)
+		target_network.set_weight(w, b)
+
+
+
 class QNetwork():
 
 	# This class essentially defines the network architecture. 
@@ -61,31 +75,42 @@ class QNetwork():
 	def create_optimizer(self):
 		# Using Adam to minimize the error between target and evaluation
 		if self.actor_mimic:
-			cost = actor_mimic_cost()
+			cost = self.actor_mimic_cost()
 		else:
-			cost = dqn_cost()
+			cost = self.dqn_cost()
 
 		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
 
 		self.session.run(tf.global_variables_initializer())
 
-	def dqn_cost():
+	def dqn_cost(self):
 		self.action_input = tf.placeholder(tf.float32, [None, self.action_dim], name = "action_input")
 		self.target_q_value = tf.placeholder(tf.float32, [None], name = "target_q_value")
 		q_value_output = tf.reduce_sum(tf.multiply(self.q_values, self.action_input), 1)
 		cost = tf.reduce_mean(tf.square(tf.subtract(self.target_q_value, q_value_output)))
 		return cost
 
-	def actor_mimic_cost():
-		expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
+	def actor_mimic_cost(self):
+		self.expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
 		cost = - tf.reduce_mean(tf.reduce_sum(tf.multiply(expert_q_values, tf.log(self.q_values))))
 		return cost
 
-	def get_boltzmann_distribution_over_q_value():
+	def update_dqn(self, state_batch, action_batch, target_batch):
+		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
+			self.action_input : action_batch, self.target_q_value : target_batch})
+
+	def update_actor_mimic_network(state_batch, expert_q_values_batch):
+		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
+			self.expert_q_values : expert_q_values_batch})
+
+	def get_boltzmann_distribution_over_q_values(self, state_batch):
 		temperature = 1.0
 		distribution = tf.exp(self.q_values / temperature)
 		dist_sum = tf.reduce_sum(distribution, 1)
-		return (distribution/dist_sum).eval()
+		return (distribution/dist_sum).eval(feed_dict = {self.state_input : state_batch})
+
+	def get_q_values(self, state):
+		return self.q_values.eval(feed_dict = {self.state_input : state})[0]
 
 
 	def save_model(self, suffix):
