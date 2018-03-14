@@ -219,8 +219,8 @@ class DQN_Agent():
                 if episode_count % 20 == 0 and self.render:
                     self.env.render()
                 ## TODO 
-                # need network module predict function
-                q_values = self.q_network.predict(current_state)
+                # need network module get_q_value function
+                q_values = self.q_network.get_q_value(current_state)
                 action = self.epsilon_greedy_policy(q_values,
                                                     epsilon)
                 next_state, reward, done, info = self.get_next_state(action,
@@ -238,24 +238,35 @@ class DQN_Agent():
                 batch = self.replay_memory.sample()
                 batch_state_lst = []
                 batch_q_target_lst = []
+                batch_action = []
                 for tmp_state, tmp_action, tmp_reward, tmp_next_state, tmp_done in batch:
                     ## TODO
                     ## this can be done in batch maybe
                     ## this maybe need to check again
-                    q_target = self.q_network.predict(tmp_state)
+                    # q_target = self.q_network.get_q_value(tmp_state)
+                    action_one_hot = np.zeros(self.num_actions)
+                    action_one_hot[tmp_action] = 1
+                    q_target = np.zeros(self.num_actions)
                     if (tmp_done):
-                        q_target[0][tmp_action] = tmp_reward
+                        # q_target[0][tmp_action] = tmp_reward
+                        q_target[tmp_action] = tmp_reward
                     else:
-                        q_target[0][tmp_action] = tmp_reward + self.gamma * np.amax(self.target_network.predict(tmp_next_state))
+                    	tmp = self.q_network.get_q_value(tmp_next_state)
+                    	idx_max_action = self.greedy_policy(tmp)
+                    	q_target[tmp_action] = tmp_reward + self.gamma * self.target_network.get_q_value(tmp_next_state)[idx_max_action]
+                        # q_target[0][tmp_action] = tmp_reward + self.gamma * np.amax(self.target_network.get_q_value(tmp_next_state))
                     batch_state_lst.append(tmp_state)
-                    batch_q_target_lst.append(q_target[0])
+                    batch_q_target_lst.append(q_target)
+                    batch_action.append(action_one_hot)
 
                 batch_state = np.vstack(batch_state_lst)
                 batch_q_target = np.array(batch_q_target_lst)
+                batch_action = np.array(batch_action)
 
                 ## TODO
-                self.q_network.fit(batch_state,
-                                   batch_q_target)
+                self.q_network.update_dqn(batch_state,
+                						  batch_action,
+                                   		  batch_q_target)
 
                 # save and test q network
                 # frequency_update = 10000
@@ -294,7 +305,7 @@ class DQN_Agent():
             current_state = self.initialize_env(env)
             reward_sum = 0
             while not done:
-                q_values = self.q_network.predict(current_state)
+                q_values = self.q_network.get_q_value(current_state)
                 action = self.epsilon_greedy_policy(q_values,
                                                     epsilon)
                 next_state, reward, done, info = self.get_next_state(action,
