@@ -7,12 +7,88 @@ class QNetwork():
 	# The network should take in state of the world as an input, 
 	# and output Q values of the actions available to the agent as the output. 
 
-	def __init__(self, environment_name):
+	def __init__(self, environment_name, actor_mimic = False):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
-		pass
+		self.is_actor_mimic = actor_mimic
+		env = gym.make(environment_name)
+		self.state_dim = list(env.observation_space.shape)
 
-	def save_model_weights(self, suffix):
+		# The shape of the origin state could have multiple dimensions.
+		# We flat the state dimensions here
+		self.flat_state_dim = 1
+		for i in self.state_dim:
+			self.flat_state_dim *= i
+
+		self.action_dim = env.action_space.n
+		self.learning_rate = 0.0001
+
+		self.session = tf.InteractiveSession()
+
+		self.create_mlp()
+		self.create_optimizer()
+
+		env.close()
+
+	def create_weights(self, shape):
+		initial = tf.truncated_normal(shape, stddev = 0.1)
+		return tf.Variable(initial)
+
+	def create_bias(self, shape):
+		initial = tf.constant(0.1, shape = shape)
+		return tf.Variable(initial)
+
+	def create_mlp(self):
+		# Craete multilayer perceptron (one hidden layer with 20 units)
+		self.hidden_units = 20
+
+		self.w1 = self.create_weights([self.flat_state_dim, self.hidden_units])
+		self.b1 = self.create_bias([self.hidden_units])
+
+		self.state_input = tf.placeholder(tf.float32, [None] + self.state_dim, name = "state_input")
+
+		flat_state = tf.reshape(self.state_input, [-1, self.flat_state_dim])
+
+		h_layer = tf.nn.relu(tf.matmul(flat_state, self.w1) + self.b1)
+
+		self.w2 = self.create_weights([self.hidden_units, self.action_dim])
+		self.b2 = self.create_bias([self.action_dim])
+
+		self.q_values = tf.add(tf.matmul(h_layer, self.w2), self.b2, name = "q_values")
+		if self.is_actor_mimic:
+			self.q_values = tf.nn.softmax(self.q_values, name = "q_values")
+
+	def create_optimizer(self):
+		# Using Adam to minimize the error between target and evaluation
+		if self.actor_mimic:
+			cost = actor_mimic_cost()
+		else:
+			cost = dqn_cost()
+
+		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
+
+		self.session.run(tf.global_variables_initializer())
+
+	def dqn_cost():
+		self.action_input = tf.placeholder(tf.float32, [None, self.action_dim], name = "action_input")
+		self.target_q_value = tf.placeholder(tf.float32, [None], name = "target_q_value")
+		q_value_output = tf.reduce_sum(tf.multiply(self.q_values, self.action_input), 1)
+		cost = tf.reduce_mean(tf.square(tf.subtract(self.target_q_value, q_value_output)))
+		return cost
+
+	def actor_mimic_cost():
+		expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
+		cost = - tf.reduce_mean(tf.reduce_sum(tf.multiply(expert_q_values, tf.log(self.q_values))))
+		return cost
+
+	def get_boltzmann_distribution_over_q_value():
+		temperature = 1.0
+		distribution = tf.exp(self.q_values / temperature)
+		dist_sum = tf.reduce_sum(distribution, 1)
+		return (distribution/dist_sum).eval()
+
+
+	def save_model(self, suffix):
 		# Helper function to save your model / weights. 
 		pass
 
@@ -20,12 +96,12 @@ class QNetwork():
 		# Helper function to load an existing model.
 		pass
 
-	def load_model_weights(self,weight_file):
-		# Helper funciton to load model weights. 
-		pass
+	def get_weight(self):
+		return self.w2, self.b2
 
-	def get_weight():
-		pass
+	def set_weight(self, w, b):
+		self.w2 = w
+		self.b2 = b
 
 class Replay_Memory():
 
