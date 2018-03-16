@@ -396,10 +396,9 @@ class DQN_Agent():
                 #                 reward_sum)
                 # if done:
                 #     print("episodes: " + str(episode_count) + "; reward_sum: " + str(reward_sum))
+                update_count += 1
             if episode_count % 200 == 0:
                 self.test()
-
-                update_count += 1
             episode_count += 1
 
 
@@ -443,19 +442,17 @@ class DQN_Agent():
 
         for i in range(episode_num):
             state = env.reset()
-
-            for t in range(100000):
+            done = False
+            while not done:
                 q_values = self.q_network.get_q_values(state)
 
                 # env.render()
-                action = self.epsilon_greedy_policy(q_values, 0.01)
+                action = self.epsilon_greedy_policy(q_values, self.epsilon_end)
 
                 state, reward, done, info = env.step(action)
 
                 total_reward += reward
 
-                if done:
-                    break
         ave_reward = total_reward / episode_num
         print ('Evaluation Average Reward:', ave_reward)    
         env.close()
@@ -481,6 +478,7 @@ class DQN_Agent():
                 current_state = self.initialize_env(env)
             else:
                 current_state = next_state
+        env.close()
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
