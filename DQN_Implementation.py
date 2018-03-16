@@ -194,6 +194,7 @@ class DQN_Agent():
                  episodes=1000000,
                  epsilon_begin=0.5,
                  epsilon_end=0.05,
+                 teach_epsilon=0.5,
                  gamma=0.99,
                  learning_rate=0.00001,
                  train_model=1,
@@ -217,6 +218,7 @@ class DQN_Agent():
         self.episodes = episodes
         self.epsilon_begin = epsilon_begin
         self.epsilon_end = epsilon_end
+        self.teach_epsilon = teach_epsilon
         self.gamma = gamma
 
         # parameter from the enviroment
@@ -491,12 +493,12 @@ class DQN_Agent():
         #      every step's current_state and q_values
         # (2), return the sample batch of current_state and q_values
 
-        epsilon = self.teach_epislon
+        epsilon = self.teach_epsilon
 
         current_state = self.initialize_env(self.env)
         done = False
         while not done:
-            q_values = self.q_network.get_q_values(current_state)
+            q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
             action = self.epsilon_greedy_policy(q_values,
                                                 epsilon)
             next_state, reward, done, info = self.get_next_state(action,
@@ -512,7 +514,7 @@ class DQN_Agent():
         batch_q_values_lst = []
         for tmp_state, tmp_q_values in batch:
             batch_state_lst.append(tmp_state)
-            q_values_lst.append(tmp_q_values)
+            batch_q_values_lst.append(tmp_q_values)
 
         return batch_state_lst, batch_q_values_lst
 
@@ -522,9 +524,9 @@ class DQN_Agent():
         env = gym.make(self.environment_name)
         done = False
         current_state = self.initialize_env(env)
-        epsilon = self.teach_epislon
+        epsilon = self.teach_epsilon
         for i in range(self.burn_in):
-            q_values = self.q_network.get_q_values(current_state)
+            q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
             action = self.epsilon_greedy_policy(q_values,
                                                 epsilon)
             next_state, _, done, _ = self.get_next_state(action,
@@ -536,6 +538,7 @@ class DQN_Agent():
                 current_state = self.initialize_env(env)
             else:
                 current_state = next_state
+        env.close()
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
@@ -572,11 +575,12 @@ def main(args):
     #                   logger=logger)
     # agent.train()
 
-    episodes = 100000
+    num_update = 10000000
     environment_name_lst = []
     teacher_agent_lst = []
     student_network_lst = []
-    num_env = len(environment_name)
+    num_env = len(environment_name_lst)
+    frequency_report_loss = 200
     # initilze the teacher agent and student network
     for _env_name in environment_name_lst:
         teacher_agent_lst.append(DQN_Agent(_env_name,
@@ -586,12 +590,13 @@ def main(args):
                                            teach_model=1))
         student_network_lst.append(QNetwork(_env_name,
                                             actor_mimic=True))
-
-    for idx_episode in range(episodes):
+    loss = 0
+    for idx_update in range(num_update):
         for idx in range(num_env):
             teacher_agent = teacher_agent_lst[idx]
             student_network = student_network_lst[idx]
-
+            ## TODO
+            # need future work(student provides state, teacher provides best q value) 
             batch_state_lst, batch_q_values_lst = teacher_agent.teach()
 
             ## TODO
@@ -599,8 +604,12 @@ def main(args):
             # the network in the list
             student_network.update_actor_mimic_network(batch_state_lst,
                                                        batch_q_values_lst)
-
-            student_network.save_model()
+            loss += student_network.actor_mimic_cost().eval(feed_dict = {self.state_input : batch_state_lst, self.expert_q_values : batch_q_values_lst})
+            
+            if ((idx_update % frequency_report_loss) == 0):
+            	student_network.save_model()
+            	print("Loss: " + str(loss/frequency_report_loss))
+            	loss = 0
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[next_student_network_idx]
