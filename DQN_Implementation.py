@@ -21,7 +21,7 @@ class QNetwork():
 	# The network should take in state of the world as an input, 
 	# and output Q values of the actions available to the agent as the output. 
 
-	def __init__(self, environment_name, actor_mimic = False):
+	def __init__(self, environment_name, actor_mimic = False, model = None):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
 		self.is_actor_mimic = actor_mimic
@@ -39,8 +39,11 @@ class QNetwork():
 
 		self.session = tf.InteractiveSession()
 
-		self.create_mlp()
-		self.create_optimizer()
+		if model != None:
+			self.load_model(model)
+		else:
+			self.create_mlp()
+			self.create_optimizer()
 
 		env.close()
 
@@ -178,6 +181,7 @@ class DQN_Agent():
 
 		self.environment_name = environment_name
 		self.q_network = QNetwork(environment_name)
+		# self.q_network = QNetwork(environment_name, model = "./model/acrobot/Acrobot-0")
 		self.replay_memory = Replay_Memory()
 		self.env = gym.make(environment_name)
 		self.action_dim = self.env.action_space.n
@@ -186,6 +190,8 @@ class DQN_Agent():
 
 		# max episode to train
 		self.episode = 1000000
+
+		self.best_performance = -500
 
 
 	def epsilon_greedy_policy(self, q_values, epsilon):
@@ -212,7 +218,7 @@ class DQN_Agent():
 
 				# Decay the epsilon
 				if (self.epsilon > 0.01):
-					self.epsilon -= (0.5 - 0.01) / 100000
+					self.epsilon -= (0.5 - 0.05) / 100000
 
 				next_state, reward, done, info = self.env.step(action)
 
@@ -248,7 +254,7 @@ class DQN_Agent():
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
 
-		episode_num = 20
+		episode_num = 10
 		total_reward = 0
 
 		env = gym.make(self.environment_name)
@@ -261,7 +267,7 @@ class DQN_Agent():
 				q_values = self.q_network.get_q_values(state)
 
 				env.render()
-				action = self.epsilon_greedy_policy(q_values, 0.01)
+				action = self.epsilon_greedy_policy(q_values, 0.05)
 
 				state, reward, done, info = env.step(action)
 
@@ -271,6 +277,11 @@ class DQN_Agent():
 					break
 		ave_reward = total_reward / episode_num
 		print 'Evaluation Average Reward:',ave_reward
+
+		if ave_reward > self.best_performance:
+			self.q_network.save_model("./model/acrobot/Acrobot", 0)
+			self.best_performance = ave_reward
+
 		env.close()
 		return ave_reward
 
@@ -289,7 +300,7 @@ def parse_arguments():
 
 def main(args):
 
-	environment_name = "CartPole-v0"
+	environment_name = "Acrobot-v1"
 	agent = DQN_Agent(environment_name)
 	agent.train()
 
