@@ -249,9 +249,14 @@ class DQN_Agent():
         self.learning_rate = learning_rate
         self.network_name = network_name
 
+        self.q_network = QNetwork(self.environment_name)
         if train_model == teach_model:
             raise Exception("Wrong agent model, agent can only do one thing between train and teach model")
-
+        else (train_model):
+            self.burn_in_memory()
+        else (teach_model):
+            self.q_network.load_model()
+            self.teach_burn_in_memory()
         self.train_model = train_model # use this agent to train the teacher
         self.teach_model = teach_model # use this agent as a teacher to teach the student
 
@@ -259,8 +264,7 @@ class DQN_Agent():
         # self.q_network = QNetwork(self.env,
         #                           self.network_name,
         #                           self.learning_rate)
-        self.q_network = QNetwork(self.environment_name)
-
+        
         # ## TODO
         # if (resume):
         #     # self.q_network.load_model(pre-train_model_path)
@@ -480,6 +484,59 @@ class DQN_Agent():
                 current_state = next_state
         env.close()
 
+
+    def teach(self):
+        # every time call this func, 
+        # (1), it will append a new episode into the replay memory with
+        #      every step's current_state and q_values
+        # (2), return the sample batch of current_state and q_values
+
+        epsilon = self.teach_epislon
+
+        current_state = self.initialize_env(self.env)
+        done = False
+        while not done:
+            q_values = self.q_network.get_q_values(current_state)
+            action = self.epsilon_greedy_policy(q_values,
+                                                epsilon)
+            next_state, reward, done, info = self.get_next_state(action,
+                                                                 self.env)
+
+            self.replay_memory.append((current_state,
+                                       q_values))
+            current_state = next_state
+
+        batch = self.replay_memory.sample()
+
+        batch_state_lst = []
+        batch_q_values_lst = []
+        for tmp_state, tmp_q_values in batch:
+            batch_state_lst.append(tmp_state)
+            q_values_lst.append(tmp_q_values)
+
+        return batch_state_lst, batch_q_values_lst
+
+
+    def teach_burn_in_memory(self):
+        
+        env = gym.make(self.environment_name)
+        done = False
+        current_state = self.initialize_env(env)
+        epsilon = self.teach_epislon
+        for i in range(self.burn_in):
+            q_values = self.q_network.get_q_values(current_state)
+            action = self.epsilon_greedy_policy(q_values,
+                                                epsilon)
+            next_state, _, done, _ = self.get_next_state(action,
+                                                         env)
+
+            self.replay_memory.append((current_state,
+                                       q_values))
+            if done:
+                current_state = self.initialize_env(env)
+            else:
+                current_state = next_state
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
     parser.add_argument('--env',dest='env',type=str)
@@ -509,11 +566,47 @@ def main(args):
     # keras.backend.tensorflow_backend.set_session(sess)
 
     # # You want to create an instance of the DQN_Agent class here, and then train / test it. 
-    environment_name = "CartPole-v0"
-    agent = DQN_Agent(environment_name,
-                      network_name='mlp',
-                      logger=logger)
-    agent.train()
+    # environment_name = "CartPole-v0"
+    # agent = DQN_Agent(environment_name,
+    #                   network_name='mlp',
+    #                   logger=logger)
+    # agent.train()
+
+    episodes = 100000
+    environment_name_lst = []
+    teacher_agent_lst = []
+    student_network_lst = []
+    num_env = len(environment_name)
+    # initilze the teacher agent and student network
+    for _env_name in environment_name_lst:
+        teacher_agent_lst.append(DQN_Agent(_env_name,
+                                           network_name='mlp',
+                                           logger=logger,
+                                           train_model=0,
+                                           teach_model=1))
+        student_network_lst.append(QNetwork(_env_name,
+                                            actor_mimic=True))
+
+    for idx_episode in range(episodes):
+        for idx in range(num_env):
+            teacher_agent = teacher_agent_lst[idx]
+            student_network = student_network_lst[idx]
+
+            batch_state_lst, batch_q_values_lst = teacher_agent.teach()
+
+            ## TODO
+            # whether update one network in the list will update
+            # the network in the list
+            student_network.update_actor_mimic_network(batch_state_lst,
+                                                       batch_q_values_lst)
+
+            student_network.save_model()
+
+            next_student_network_idx = (idx + 1) % num_env
+            next_student_network = student_network_lst[next_student_network_idx]
+
+            w, b = student_network.get_weight()
+            next_student_network.set_weight(w, b)
 
 if __name__ == '__main__':
     main(sys.argv)
