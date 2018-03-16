@@ -21,7 +21,7 @@ class QNetwork():
 	# The network should take in state of the world as an input, 
 	# and output Q values of the actions available to the agent as the output. 
 
-	def __init__(self, environment_name, actor_mimic = False):
+	def __init__(self, environment_name, actor_mimic = False, model = None):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
 		self.is_actor_mimic = actor_mimic
@@ -39,8 +39,11 @@ class QNetwork():
 
 		self.session = tf.InteractiveSession()
 
-		self.create_mlp()
-		self.create_optimizer()
+		if model != None:
+			self.load_model(model)
+		else:
+			self.create_mlp()
+			self.create_optimizer()
 
 		env.close()
 
