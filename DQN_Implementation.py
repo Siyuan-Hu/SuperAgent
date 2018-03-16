@@ -519,6 +519,8 @@ class DQN_Agent():
             self.replay_memory.append((current_state,
                                        q_values))
             current_state = next_state
+            # just append one step into memory
+            break
 
         batch = self.replay_memory.sample()
 
