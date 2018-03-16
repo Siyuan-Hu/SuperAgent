@@ -269,6 +269,9 @@ class DQN_Agent():
             self.burn_in_memory()
         else:
             self.teach_burn_in_memory()
+            # flag to keep the status for enviroment in the teach mode
+            self.teach_done = False
+            self.teach_current_state = self.initialize_env(self.env)
 
             
         self.train_model = train_model # use this agent to train the teacher
@@ -507,20 +510,36 @@ class DQN_Agent():
 
         epsilon = self.teach_epsilon
 
-        current_state = self.initialize_env(self.env)
-        done = False
-        while not done:
-            q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
-            action = self.epsilon_greedy_policy(q_values,
-                                                epsilon)
-            next_state, reward, done, info = self.get_next_state(action,
-                                                                 self.env)
+        # current_state = self.initialize_env(self.env)
+        # done = False
+        # while not done:
+        #     q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+        #     action = self.epsilon_greedy_policy(q_values,
+        #                                         epsilon)
+        #     next_state, reward, done, info = self.get_next_state(action,
+        #                                                          self.env)
 
-            self.replay_memory.append((current_state,
-                                       q_values))
-            current_state = next_state
-            # just append one step into memory
-            break
+        #     self.replay_memory.append((current_state,
+        #                                q_values))
+        #     current_state = next_state
+        #     # just append one step into memory
+        #     break
+
+        current_state = self.teach_current_state
+
+        q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+        action = self.epsilon_greedy_policy(q_values,
+        									epsilon)
+        next_state, _, done, _ = self.get_next_state(action,
+        											 self.env)
+        self.replay_memory.append((current_state,
+        						   q_values))
+
+        if done:
+        	self.teach_current_state = self.initialize_env(self.env)
+        else:
+        	self.teach_current_state = next_state
+
 
         batch = self.replay_memory.sample()
 
