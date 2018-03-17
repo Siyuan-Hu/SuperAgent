@@ -609,7 +609,7 @@ def main(args):
     # # agent.train()
 
     num_update = 10000000
-    environment_name_lst = ["Acrobot-v1"]
+    environment_name_lst = ["MountainCar-v0"]
     teacher_agent_lst = []
     student_network_lst = []
     num_env = len(environment_name_lst)
@@ -619,7 +619,7 @@ def main(args):
         teacher_agent_lst.append(DQN_Agent(_env_name,
                                            network_name='mlp',
                                            logger=logger,
-                                           model="./expert/acrobot/Acrobot-0",
+                                           model="./expert/mountaincar/MountainCar-v0-243",
                                            train_model=0,
                                            teach_model=1,
                                            burn_in=100))
@@ -653,14 +653,15 @@ def main(args):
 
             if ((idx_update % frequency_report_loss) == 0):
                 print(loss / frequency_report_loss)
-                student_network.save_model("./" + environment_name_lst[idx], idx_update)
+                # student_network.save_model("./" + environment_name_lst[idx], idx_update)
                 student_agent = DQN_Agent(environment_name_lst[idx],
                                            network_name='mlp',
                                            logger=logger,
-                                           model= "./" + environment_name_lst[idx]+"-"+str(idx_update),
+                                           # model= "./" + environment_name_lst[idx]+"-"+str(idx_update),
                                            train_model=0,
                                            teach_model=1,
                                            burn_in=0)
+                student_agent.q_network = student_network
                 student_agent.test()
                 loss = 0
 
