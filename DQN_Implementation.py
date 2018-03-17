@@ -102,21 +102,21 @@ class QNetwork():
 		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values))))
 
 	def update_dqn(self, state_batch, action_batch, target_batch):
-		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
+		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
 			self.action_input : action_batch, self.target_q_value : target_batch})
 
 	def update_actor_mimic_network(self, state_batch, expert_q_values_batch):
-		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
+		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
 			self.expert_q_values : expert_q_values_batch})
 
 	def get_boltzmann_distribution_over_q_values(self, state_batch):
 		temperature = 1.0
 		distribution = tf.exp(self.q_values / temperature)
 		dist_sum = tf.reduce_sum(distribution, 1)
-		return (distribution/dist_sum).eval(feed_dict = {self.state_input : state_batch})
+		return (distribution/dist_sum).eval(session = self.session, feed_dict = {self.state_input : state_batch})
 
 	def get_q_values(self, state):
-		return self.q_values.eval(feed_dict = {self.state_input : [state]})[0]
+		return self.q_values.eval(session = self.session, feed_dict = {self.state_input : [state]})[0]
 
 
 	def save_model(self, suffix, step):
@@ -641,8 +641,8 @@ def main(args):
             # the network in the list
             student_network.update_actor_mimic_network(batch_state_lst,
                                                        batch_q_values_lst)
-            loss += student_network.calculate_actor_mimic_cost().eval(feed_dict = {student_network.state_input : batch_state_lst, 
-                student_network.expert_q_values : batch_q_values_lst})
+            loss += student_network.calculate_actor_mimic_cost().eval(session = student_network.session, feed_dict = {
+            	student_network.state_input : batch_state_lst, student_network.expert_q_values : batch_q_values_lst})
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[next_student_network_idx]
