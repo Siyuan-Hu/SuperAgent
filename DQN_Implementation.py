@@ -109,11 +109,13 @@ class QNetwork():
 		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
 			self.expert_q_values : expert_q_values_batch})
 
-	def get_boltzmann_distribution_over_q_values(self, state_batch):
+	def get_boltzmann_distribution_over_q_values(self, state):
+		q_values = self.get_q_values(state)
+
 		temperature = 1.0
-		distribution = tf.exp(self.q_values / temperature)
-		dist_sum = tf.reduce_sum(distribution, 1)
-		return (distribution/dist_sum).eval(session = self.session, feed_dict = {self.state_input : state_batch})
+		distribution = np.exp(q_values / temperature)
+		dist_sum = np.sum(distribution)
+		return distribution / dist_sum
 
 	def get_q_values(self, state):
 		return self.q_values.eval(session = self.session, feed_dict = {self.state_input : [state]})[0]
@@ -527,7 +529,7 @@ class DQN_Agent():
 
         current_state = self.teach_current_state
 
-        q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+        q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
         action = self.epsilon_greedy_policy(q_values,
                                             epsilon)
         next_state, _, done, _ = self.get_next_state(action,
@@ -559,7 +561,7 @@ class DQN_Agent():
         current_state = self.initialize_env(env)
         epsilon = self.teach_epsilon
         for i in range(self.burn_in):
-            q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+            q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
             action = self.epsilon_greedy_policy(q_values,
                                                 epsilon)
 
