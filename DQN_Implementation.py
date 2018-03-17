@@ -83,7 +83,7 @@ class QNetwork():
 			cost = self.dqn_cost()
 
 		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
-
+		tf.add_to_collection("optimizer", self.optimizer)
 		self.session.run(tf.global_variables_initializer())
 
 	def dqn_cost(self):
@@ -95,14 +95,17 @@ class QNetwork():
 
 	def actor_mimic_cost(self):
 		self.expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
-		cost = - tf.reduce_mean(tf.reduce_sum(tf.multiply(expert_q_values, tf.log(self.q_values))))
+		cost = self.calculate_actor_mimic_cost()
 		return cost
+
+	def calculate_actor_mimic_cost(self):
+		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values))))
 
 	def update_dqn(self, state_batch, action_batch, target_batch):
 		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
 			self.action_input : action_batch, self.target_q_value : target_batch})
 
-	def update_actor_mimic_network(state_batch, expert_q_values_batch):
+	def update_actor_mimic_network(self, state_batch, expert_q_values_batch):
 		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
 			self.expert_q_values : expert_q_values_batch})
 
@@ -119,7 +122,7 @@ class QNetwork():
 	def save_model(self, suffix, step):
 		# Helper function to save your model.
 		saver = tf.train.Saver()
-		tf.add_to_collection("optimizer", self.optimizer)
+		# tf.add_to_collection("optimizer", self.optimizer)
 		saver.save(self.session, suffix, global_step = step)
 
 	def load_model(self, model_file):
@@ -144,38 +147,38 @@ class QNetwork():
 
 class Replay_Memory():
 
-    def __init__(self,
-                 batch_size=4,
-                 memory_size=50000,
-                 burn_in=10000):
-        import collections
-        # The memory essentially stores transitions recorder from the agent
-        # taking actions in the environment.
+	def __init__(self,
+				 batch_size=4,
+				 memory_size=50000,
+				 burn_in=10000):
+		import collections
+		# The memory essentially stores transitions recorder from the agent
+		# taking actions in the environment.
 
-        # Burn in episodes define the number of episodes that are written into the memory from the 
-        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
-        # A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
-        
-        self.batch_size = batch_size
-        self.memory_size = memory_size
-        self.burn_in = burn_in
-        self.memory = collections.deque(maxlen=memory_size)
+		# Burn in episodes define the number of episodes that are written into the memory from the 
+		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
+		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
+		
+		self.batch_size = batch_size
+		self.memory_size = memory_size
+		self.burn_in = burn_in
+		self.memory = collections.deque(maxlen=memory_size)
 
-    def sample(self):
-        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
-        # You will feed this to your model to train.
+	def sample(self):
+		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
+		# You will feed this to your model to train.
 
-        current_memory_size = len(self.memory)
-        sample_index = np.random.choice(current_memory_size,
-                                        size=self.batch_size)
-        samples = [self.memory[idx] for idx in sample_index]
+		current_memory_size = len(self.memory)
+		sample_index = np.random.choice(current_memory_size,
+										size=self.batch_size)
+		samples = [self.memory[idx] for idx in sample_index]
 
-        return np.array(samples)
+		return np.array(samples)
 
-    def append(self, transition):
-        # Appends transition to the memory.
+	def append(self, transition):
+		# Appends transition to the memory.
 
-        self.memory.append(transition)
+		self.memory.append(transition)
 
 class DQN_Agent():
 
@@ -202,6 +205,7 @@ class DQN_Agent():
                  learning_rate=0.00001,
                  train_model=1,
                  teach_model=0,
+                 model=None,
                  resume=0,
                  batch_size=64,
                  memory_size=50000,
@@ -240,7 +244,6 @@ class DQN_Agent():
         self.replay_memory = Replay_Memory(self.batch_size,
                                            self.memory_size,
                                            self.burn_in)
-        self.burn_in_memory()
 
         # use monitor to generate video
         if (open_monitor):
@@ -254,14 +257,23 @@ class DQN_Agent():
         self.learning_rate = learning_rate
         self.network_name = network_name
 
-        self.q_network = QNetwork(self.environment_name)
+        if model == None:
+            self.q_network = QNetwork(self.environment_name)
+        else:
+            self.q_network = QNetwork(self.environment_name, model=model)
+
+
         if train_model == teach_model:
             raise Exception("Wrong agent model, agent can only do one thing between train and teach model")
-        else (train_model):
+        elif (train_model):
             self.burn_in_memory()
-        else (teach_model):
-            self.q_network.load_model()
+        else:
             self.teach_burn_in_memory()
+            # flag to keep the status for enviroment in the teach mode
+            self.teach_done = False
+            self.teach_current_state = self.initialize_env(self.env)
+
+            
         self.train_model = train_model # use this agent to train the teacher
         self.teach_model = teach_model # use this agent as a teacher to teach the student
 
@@ -443,7 +455,7 @@ class DQN_Agent():
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory. 
 
-        episode_num = 20
+        episode_num = 5
         total_reward = 0
 
         env = gym.make(self.environment_name)
@@ -455,7 +467,7 @@ class DQN_Agent():
             while not done:
                 q_values = self.q_network.get_q_values(state)
 
-                # env.render()
+                env.render()
                 action = self.epsilon_greedy_policy(q_values, self.epsilon_end)
 
                 state, reward, done, info = env.step(action)
@@ -498,18 +510,36 @@ class DQN_Agent():
 
         epsilon = self.teach_epsilon
 
-        current_state = self.initialize_env(self.env)
-        done = False
-        while not done:
-            q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
-            action = self.epsilon_greedy_policy(q_values,
-                                                epsilon)
-            next_state, reward, done, info = self.get_next_state(action,
-                                                                 self.env)
+        # current_state = self.initialize_env(self.env)
+        # done = False
+        # while not done:
+        #     q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+        #     action = self.epsilon_greedy_policy(q_values,
+        #                                         epsilon)
+        #     next_state, reward, done, info = self.get_next_state(action,
+        #                                                          self.env)
 
-            self.replay_memory.append((current_state,
-                                       q_values))
-            current_state = next_state
+        #     self.replay_memory.append((current_state,
+        #                                q_values))
+        #     current_state = next_state
+        #     # just append one step into memory
+        #     break
+
+        current_state = self.teach_current_state
+
+        q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
+        action = self.epsilon_greedy_policy(q_values,
+                                            epsilon)
+        next_state, _, done, _ = self.get_next_state(action,
+                                                     self.env)
+        self.replay_memory.append((current_state,
+                                   q_values))
+
+        if done:
+            self.teach_current_state = self.initialize_env(self.env)
+        else:
+            self.teach_current_state = next_state
+
 
         batch = self.replay_memory.sample()
 
@@ -532,9 +562,9 @@ class DQN_Agent():
             q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
             action = self.epsilon_greedy_policy(q_values,
                                                 epsilon)
+
             next_state, _, done, _ = self.get_next_state(action,
                                                          env)
-
             self.replay_memory.append((current_state,
                                        q_values))
             if done:
@@ -555,44 +585,48 @@ def main(args):
     import logging
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    # args = parse_arguments()
-    # p_attrs = vars(args)
-    # for k, v in sorted(p_attrs.items(), key=lambda x: x[0]):
-    #     logging.info("%s : %s", k, v)
+    # # args = parse_arguments()
+    # # p_attrs = vars(args)
+    # # for k, v in sorted(p_attrs.items(), key=lambda x: x[0]):
+    # #     logging.info("%s : %s", k, v)
 
 
-    # environment_name = args.env
+    # # environment_name = args.env
 
-    # # Setting the session to allow growth, so it doesn't allocate all GPU memory. 
-    # gpu_ops = tf.GPUOptions(allow_growth=True)
-    # config = tf.ConfigProto(gpu_options=gpu_ops)
-    # sess = tf.Session(config=config)
+    # # # Setting the session to allow growth, so it doesn't allocate all GPU memory. 
+    # # gpu_ops = tf.GPUOptions(allow_growth=True)
+    # # config = tf.ConfigProto(gpu_options=gpu_ops)
+    # # sess = tf.Session(config=config)
 
-    # # Setting this as the default tensorflow session. 
-    # keras.backend.tensorflow_backend.set_session(sess)
+    # # # Setting this as the default tensorflow session. 
+    # # keras.backend.tensorflow_backend.set_session(sess)
 
-    # # You want to create an instance of the DQN_Agent class here, and then train / test it. 
-    # environment_name = "CartPole-v0"
-    # agent = DQN_Agent(environment_name,
-    #                   network_name='mlp',
-    #                   logger=logger)
-    # agent.train()
+    # # # You want to create an instance of the DQN_Agent class here, and then train / test it. 
+    # # environment_name = "CartPole-v0"
+    # # agent = DQN_Agent(environment_name,
+    # #                   network_name='mlp',
+    # #                   logger=logger)
+    # # agent.train()
 
     num_update = 10000000
-    environment_name_lst = []
+    environment_name_lst = ["Acrobot-v1"]
     teacher_agent_lst = []
     student_network_lst = []
     num_env = len(environment_name_lst)
-    frequency_report_loss = 200
+    frequency_report_loss = 1
     # initilze the teacher agent and student network
     for _env_name in environment_name_lst:
         teacher_agent_lst.append(DQN_Agent(_env_name,
                                            network_name='mlp',
                                            logger=logger,
+                                           model="./expert/acrobot/Acrobot-0",
                                            train_model=0,
-                                           teach_model=1))
+                                           teach_model=1,
+                                           burn_in=100))
         student_network_lst.append(QNetwork(_env_name,
                                             actor_mimic=True))
+
+        
     loss = 0
     for idx_update in range(num_update):
         for idx in range(num_env):
@@ -607,18 +641,37 @@ def main(args):
             # the network in the list
             student_network.update_actor_mimic_network(batch_state_lst,
                                                        batch_q_values_lst)
-            loss += student_network.actor_mimic_cost().eval(feed_dict = {self.state_input : batch_state_lst, self.expert_q_values : batch_q_values_lst})
-            
-            if ((idx_update % frequency_report_loss) == 0):
-            	student_network.save_model()
-            	print("Loss: " + str(loss/frequency_report_loss))
-            	loss = 0
+            loss += student_network.calculate_actor_mimic_cost().eval(feed_dict = {student_network.state_input : batch_state_lst, 
+                student_network.expert_q_values : batch_q_values_lst})
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[next_student_network_idx]
 
             w, b = student_network.get_weight()
             next_student_network.set_weight(w, b)
+
+
+            if ((idx_update % frequency_report_loss) == 0):
+                print(loss / frequency_report_loss)
+                student_network.save_model("./" + environment_name_lst[idx], idx_update)
+                student_agent = DQN_Agent(environment_name_lst[idx],
+                                           network_name='mlp',
+                                           logger=logger,
+                                           model= "./" + environment_name_lst[idx]+"-"+str(idx_update),
+                                           train_model=0,
+                                           teach_model=1,
+                                           burn_in=0)
+                student_agent.test()
+                loss = 0
+
+
+
+    # environment_name = "Acrobot-v1"
+    # agent = DQN_Agent(environment_name,
+    #                   network_name='mlp',
+    #                   model="./expert/acrobot/Acrobot-0", 
+    #                   logger=logger)
+    # agent.test()
 
 if __name__ == '__main__':
     main(sys.argv)
