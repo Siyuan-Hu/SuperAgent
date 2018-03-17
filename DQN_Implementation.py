@@ -99,7 +99,7 @@ class QNetwork():
 		return cost
 
 	def calculate_actor_mimic_cost(self):
-		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values))))
+		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values)), 1))
 
 	def update_dqn(self, state_batch, action_batch, target_batch):
 		self.optimizer.run(feed_dict = {self.state_input : state_batch, 
