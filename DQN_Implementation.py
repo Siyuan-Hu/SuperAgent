@@ -21,7 +21,7 @@ class QNetwork():
 	# The network should take in state of the world as an input, 
 	# and output Q values of the actions available to the agent as the output. 
 
-	def __init__(self, environment_name, actor_mimic = False, model = None):
+	def __init__(self, environment_name, actor_mimic = False, model = None, learning_rate = 0.0001):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
 		self.is_actor_mimic = actor_mimic
@@ -35,7 +35,7 @@ class QNetwork():
 			self.flat_state_dim *= i
 
 		self.action_dim = env.action_space.n
-		self.learning_rate = 0.0001
+		self.learning_rate = learning_rate
 
 		self.session = tf.InteractiveSession()
 
@@ -615,7 +615,7 @@ def main(args):
     teacher_agent_lst = []
     student_network_lst = []
     num_env = len(environment_name_lst)
-    frequency_report_loss = 1
+    frequency_report_loss = 10
     # initilze the teacher agent and student network
     for _env_name in environment_name_lst:
         teacher_agent_lst.append(DQN_Agent(_env_name,
@@ -626,7 +626,8 @@ def main(args):
                                            teach_model=1,
                                            burn_in=100))
         student_network_lst.append(QNetwork(_env_name,
-                                            actor_mimic=True))
+                                            actor_mimic=True,
+                                            learning_rate = 0.01))
 
         
     loss = 0
