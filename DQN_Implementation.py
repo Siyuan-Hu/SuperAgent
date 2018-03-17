@@ -37,7 +37,7 @@ class QNetwork():
 		self.action_dim = env.action_space.n
 		self.learning_rate = learning_rate
 
-		self.session = tf.InteractiveSession()
+		self.session = tf.InteractiveSession(graph = tf.Graph())
 
 		if model != None:
 			self.load_model(model)
@@ -78,11 +78,11 @@ class QNetwork():
 	def create_optimizer(self):
 		# Using Adam to minimize the error between target and evaluation
 		if self.is_actor_mimic:
-			cost = self.actor_mimic_cost()
+			self.cost = self.actor_mimic_cost()
 		else:
-			cost = self.dqn_cost()
+			self.cost = self.dqn_cost()
 
-		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
+		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cost, name = "optimizer")
 		tf.add_to_collection("optimizer", self.optimizer)
 		self.session.run(tf.global_variables_initializer())
 
@@ -95,11 +95,12 @@ class QNetwork():
 
 	def actor_mimic_cost(self):
 		self.expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
-		cost = self.calculate_actor_mimic_cost()
+		cost = - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values)), 1))
 		return cost
 
-	def calculate_actor_mimic_cost(self):
-		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values)), 1))
+	def get_actor_mimic_cost(self, state_batch, expert_q_values_batch):
+		return self.cost.eval(session = self.session, feed_dict = {self.state_input : state_batch, 
+			self.expert_q_values : expert_q_values_batch})
 
 	def update_dqn(self, state_batch, action_batch, target_batch):
 		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
@@ -644,8 +645,7 @@ def main(args):
             # the network in the list
             student_network.update_actor_mimic_network(batch_state_lst,
                                                        batch_q_values_lst)
-            loss += student_network.calculate_actor_mimic_cost().eval(session = student_network.session, feed_dict = {
-            	student_network.state_input : batch_state_lst, student_network.expert_q_values : batch_q_values_lst})
+            loss += student_network.get_actor_mimic_cost(batch_state_lst, batch_q_values_lst)
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[next_student_network_idx]
