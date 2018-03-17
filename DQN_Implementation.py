@@ -529,16 +529,16 @@ class DQN_Agent():
 
         q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
         action = self.epsilon_greedy_policy(q_values,
-        									epsilon)
+                                            epsilon)
         next_state, _, done, _ = self.get_next_state(action,
-        											 self.env)
+                                                     self.env)
         self.replay_memory.append((current_state,
-        						   q_values))
+                                   q_values))
 
         if done:
-        	self.teach_current_state = self.initialize_env(self.env)
+            self.teach_current_state = self.initialize_env(self.env)
         else:
-        	self.teach_current_state = next_state
+            self.teach_current_state = next_state
 
 
         batch = self.replay_memory.sample()
