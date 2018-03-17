@@ -2,185 +2,187 @@
 import keras, tensorflow as tf, numpy as np, gym, sys, copy, argparse
 
 class MultitaskNetwork(object):
-	def __init__(self, source_environment_names, target_environment_name):
-		source_networks = []
-		for environment_name in source_environment_names:
-			source_networks.append(QNetwork(environment_name, True))
-		target_network = QNetwork(target_environment_name, False)
+    def __init__(self, source_environment_names, target_environment_name):
+        source_networks = []
+        for environment_name in source_environment_names:
+            source_networks.append(QNetwork(environment_name, True))
+        target_network = QNetwork(target_environment_name, False)
 
-	def synchronize_network(self, w, b):
-		for network in source_networks:
-			network.set_weight(w, b)
-		target_network.set_weight(w, b)
+    def synchronize_network(self, w, b):
+        for network in source_networks:
+            network.set_weight(w, b)
+        target_network.set_weight(w, b)
 
 
 
 class QNetwork():
 
-	# This class essentially defines the network architecture. 
-	# The network should take in state of the world as an input, 
-	# and output Q values of the actions available to the agent as the output. 
+    # This class essentially defines the network architecture. 
+    # The network should take in state of the world as an input, 
+    # and output Q values of the actions available to the agent as the output. 
 
-	def __init__(self, environment_name, actor_mimic = False, model = None, learning_rate = 0.0001):
-		# Define your network architecture here. It is also a good idea to define any training operations 
-		# and optimizers here, initialize your variables, or alternately compile your model here.  
-		self.is_actor_mimic = actor_mimic
-		env = gym.make(environment_name)
-		self.state_dim = list(env.observation_space.shape)
+    def __init__(self, environment_name, actor_mimic = False, model = None, learning_rate = 0.0001):
+        # Define your network architecture here. It is also a good idea to define any training operations 
+        # and optimizers here, initialize your variables, or alternately compile your model here.  
+        self.is_actor_mimic = actor_mimic
+        env = gym.make(environment_name)
+        self.state_dim = list(env.observation_space.shape)
+        print(self.state_dim)
 
-		# The shape of the origin state could have multiple dimensions.
-		# We flat the state dimensions here
-		self.flat_state_dim = 1
-		for i in self.state_dim:
-			self.flat_state_dim *= i
+        # The shape of the origin state could have multiple dimensions.
+        # We flat the state dimensions here
+        self.flat_state_dim = 1
+        for i in self.state_dim:
+            self.flat_state_dim *= i
 
-		self.action_dim = env.action_space.n
-		self.learning_rate = learning_rate
+        self.action_dim = env.action_space.n
 
-		self.session = tf.InteractiveSession()
+        self.learning_rate = learning_rate
 
-		if model != None:
-			self.load_model(model)
-		else:
-			self.create_mlp()
-			self.create_optimizer()
+        self.session = tf.InteractiveSession()
 
-		env.close()
+        if model != None:
+            self.load_model(model)
+        else:
+            self.create_mlp()
+            self.create_optimizer()
 
-	def create_weights(self, shape):
-		initial = tf.truncated_normal(shape, stddev = 0.1)
-		return tf.Variable(initial)
+        env.close()
 
-	def create_bias(self, shape):
-		initial = tf.constant(0.1, shape = shape)
-		return tf.Variable(initial)
+    def create_weights(self, shape):
+        initial = tf.truncated_normal(shape, stddev = 0.1)
+        return tf.Variable(initial)
 
-	def create_mlp(self):
-		# Craete multilayer perceptron (one hidden layer with 20 units)
-		self.hidden_units = 20
+    def create_bias(self, shape):
+        initial = tf.constant(0.1, shape = shape)
+        return tf.Variable(initial)
 
-		self.w1 = self.create_weights([self.flat_state_dim, self.hidden_units])
-		self.b1 = self.create_bias([self.hidden_units])
+    def create_mlp(self):
+        # Craete multilayer perceptron (one hidden layer with 20 units)
+        self.hidden_units = 20
 
-		self.state_input = tf.placeholder(tf.float32, [None] + self.state_dim, name = "state_input")
+        self.w1 = self.create_weights([self.flat_state_dim, self.hidden_units])
+        self.b1 = self.create_bias([self.hidden_units])
 
-		flat_state = tf.reshape(self.state_input, [-1, self.flat_state_dim])
+        self.state_input = tf.placeholder(tf.float32, [None] + self.state_dim, name = "state_input")
 
-		h_layer = tf.nn.relu(tf.matmul(flat_state, self.w1) + self.b1)
+        flat_state = tf.reshape(self.state_input, [-1, self.flat_state_dim])
 
-		self.w2 = self.create_weights([self.hidden_units, self.action_dim])
-		self.b2 = self.create_bias([self.action_dim])
+        h_layer = tf.nn.relu(tf.matmul(flat_state, self.w1) + self.b1)
 
-		self.q_values = tf.add(tf.matmul(h_layer, self.w2), self.b2, name = "q_values")
-		if self.is_actor_mimic:
-			self.q_values = tf.nn.softmax(self.q_values, name = "q_values")
+        self.w2 = self.create_weights([self.hidden_units, self.action_dim])
+        self.b2 = self.create_bias([self.action_dim])
 
-	def create_optimizer(self):
-		# Using Adam to minimize the error between target and evaluation
-		if self.is_actor_mimic:
-			cost = self.actor_mimic_cost()
-		else:
-			cost = self.dqn_cost()
+        self.q_values = tf.add(tf.matmul(h_layer, self.w2), self.b2, name = "q_values")
+        if self.is_actor_mimic:
+            self.q_values = tf.nn.softmax(self.q_values, name = "q_values")
 
-		self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
-		tf.add_to_collection("optimizer", self.optimizer)
-		self.session.run(tf.global_variables_initializer())
+    def create_optimizer(self):
+        # Using Adam to minimize the error between target and evaluation
+        if self.is_actor_mimic:
+            cost = self.actor_mimic_cost()
+        else:
+            cost = self.dqn_cost()
 
-	def dqn_cost(self):
-		self.action_input = tf.placeholder(tf.float32, [None, self.action_dim], name = "action_input")
-		self.target_q_value = tf.placeholder(tf.float32, [None], name = "target_q_value")
-		q_value_output = tf.reduce_sum(tf.multiply(self.q_values, self.action_input), 1)
-		cost = tf.reduce_mean(tf.square(tf.subtract(self.target_q_value, q_value_output)))
-		return cost
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
+        tf.add_to_collection("optimizer", self.optimizer)
+        self.session.run(tf.global_variables_initializer())
 
-	def actor_mimic_cost(self):
-		self.expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
-		cost = self.calculate_actor_mimic_cost()
-		return cost
+    def dqn_cost(self):
+        self.action_input = tf.placeholder(tf.float32, [None, self.action_dim], name = "action_input")
+        self.target_q_value = tf.placeholder(tf.float32, [None], name = "target_q_value")
+        q_value_output = tf.reduce_sum(tf.multiply(self.q_values, self.action_input), 1)
+        cost = tf.reduce_mean(tf.square(tf.subtract(self.target_q_value, q_value_output)))
+        return cost
 
-	def calculate_actor_mimic_cost(self):
-		return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values)), 1))
+    def actor_mimic_cost(self):
+        self.expert_q_values = tf.placeholder(tf.float32, [None, self.action_dim])
+        cost = self.calculate_actor_mimic_cost()
+        return cost
 
-	def update_dqn(self, state_batch, action_batch, target_batch):
-		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
-			self.action_input : action_batch, self.target_q_value : target_batch})
+    def calculate_actor_mimic_cost(self):
+        return - tf.reduce_mean(tf.reduce_sum(tf.multiply(self.expert_q_values, tf.log(self.q_values)), 1))
 
-	def update_actor_mimic_network(self, state_batch, expert_q_values_batch):
-		self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
-			self.expert_q_values : expert_q_values_batch})
+    def update_dqn(self, state_batch, action_batch, target_batch):
+        self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
+            self.action_input : action_batch, self.target_q_value : target_batch})
 
-	def get_boltzmann_distribution_over_q_values(self, state):
-		q_values = self.get_q_values(state)
+    def update_actor_mimic_network(self, state_batch, expert_q_values_batch):
+        self.optimizer.run(session = self.session, feed_dict = {self.state_input : state_batch, 
+            self.expert_q_values : expert_q_values_batch})
 
-		temperature = 1.0
-		distribution = np.exp(q_values / temperature)
-		dist_sum = np.sum(distribution)
-		return distribution / dist_sum
+    def get_boltzmann_distribution_over_q_values(self, state):
+        q_values = self.get_q_values(state)
 
-	def get_q_values(self, state):
-		return self.q_values.eval(session = self.session, feed_dict = {self.state_input : [state]})[0]
+        temperature = 1
+        distribution = np.exp(q_values / temperature)
+        dist_sum = np.sum(distribution)
+        return distribution / dist_sum
+
+    def get_q_values(self, state):
+        return self.q_values.eval(session = self.session, feed_dict = {self.state_input : [state]})[0]
 
 
-	def save_model(self, suffix, step):
-		# Helper function to save your model.
-		saver = tf.train.Saver()
-		# tf.add_to_collection("optimizer", self.optimizer)
-		saver.save(self.session, suffix, global_step = step)
+    def save_model(self, suffix, step):
+        # Helper function to save your model.
+        saver = tf.train.Saver()
+        # tf.add_to_collection("optimizer", self.optimizer)
+        saver.save(self.session, suffix, global_step = step)
 
-	def load_model(self, model_file):
-		# Helper function to load an existing model.
-		saver = tf.train.import_meta_graph(model_file + '.meta')
-		saver.restore(self.session, model_file)
+    def load_model(self, model_file):
+        # Helper function to load an existing model.
+        saver = tf.train.import_meta_graph(model_file + '.meta')
+        saver.restore(self.session, model_file)
 
-		graph = tf.get_default_graph()
-		self.q_values = graph.get_tensor_by_name("q_values:0")
-		self.state_input = graph.get_tensor_by_name("state_input:0")
-		self.action_input = graph.get_tensor_by_name("action_input:0")
-		self.target_q_value = graph.get_tensor_by_name("target_q_value:0")
-		self.optimizer = tf.get_collection("optimizer")[0]
+        graph = tf.get_default_graph()
+        self.q_values = graph.get_tensor_by_name("q_values:0")
+        self.state_input = graph.get_tensor_by_name("state_input:0")
+        self.action_input = graph.get_tensor_by_name("action_input:0")
+        self.target_q_value = graph.get_tensor_by_name("target_q_value:0")
+        self.optimizer = tf.get_collection("optimizer")[0]
 
-	def get_weight(self):
-		return self.w2, self.b2
+    def get_weight(self):
+        return self.w2, self.b2
 
-	def set_weight(self, w, b):
-		self.w2 = w
-		self.b2 = b
+    def set_weight(self, w, b):
+        self.w2 = w
+        self.b2 = b
 
 
 class Replay_Memory():
 
-	def __init__(self,
-				 batch_size=4,
-				 memory_size=50000,
-				 burn_in=10000):
-		import collections
-		# The memory essentially stores transitions recorder from the agent
-		# taking actions in the environment.
+    def __init__(self,
+                 batch_size=4,
+                 memory_size=50000,
+                 burn_in=10000):
+        import collections
+        # The memory essentially stores transitions recorder from the agent
+        # taking actions in the environment.
 
-		# Burn in episodes define the number of episodes that are written into the memory from the 
-		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
-		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
-		
-		self.batch_size = batch_size
-		self.memory_size = memory_size
-		self.burn_in = burn_in
-		self.memory = collections.deque(maxlen=memory_size)
+        # Burn in episodes define the number of episodes that are written into the memory from the 
+        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
+        # A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
+        
+        self.batch_size = batch_size
+        self.memory_size = memory_size
+        self.burn_in = burn_in
+        self.memory = collections.deque(maxlen=memory_size)
 
-	def sample(self):
-		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
-		# You will feed this to your model to train.
+    def sample(self):
+        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
+        # You will feed this to your model to train.
 
-		current_memory_size = len(self.memory)
-		sample_index = np.random.choice(current_memory_size,
-										size=self.batch_size)
-		samples = [self.memory[idx] for idx in sample_index]
+        current_memory_size = len(self.memory)
+        sample_index = np.random.choice(current_memory_size,
+                                        size=self.batch_size)
+        samples = [self.memory[idx] for idx in sample_index]
 
-		return np.array(samples)
+        return np.array(samples)
 
-	def append(self, transition):
-		# Appends transition to the memory.
+    def append(self, transition):
+        # Appends transition to the memory.
 
-		self.memory.append(transition)
+        self.memory.append(transition)
 
 class DQN_Agent():
 
@@ -234,6 +236,10 @@ class DQN_Agent():
         self.env = gym.make(self.environment_name)
         self.num_actions = self.env.action_space.n
         self.num_observation = self.env.observation_space.shape[0]
+
+        print(self.environment_name)
+        print(self.num_actions)
+        print(self.num_observation)
 
         # parameter of frequency
         self.frequency_update = frequency_update
@@ -457,7 +463,7 @@ class DQN_Agent():
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory. 
 
-        episode_num = 5
+        episode_num = 1
         total_reward = 0
 
         env = gym.make(self.environment_name)
@@ -527,20 +533,20 @@ class DQN_Agent():
         #     # just append one step into memory
         #     break
 
-        current_state = self.teach_current_state
+        # current_state = self.teach_current_state
 
-        q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
-        action = self.epsilon_greedy_policy(q_values,
-                                            epsilon)
-        next_state, _, done, _ = self.get_next_state(action,
-                                                     self.env)
-        self.replay_memory.append((current_state,
-                                   q_values))
+        # q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
+        # action = self.epsilon_greedy_policy(q_values,
+        #                                     epsilon)
+        # next_state, _, done, _ = self.get_next_state(action,
+        #                                              self.env)
+        # self.replay_memory.append((current_state,
+        #                            q_values))
 
-        if done:
-            self.teach_current_state = self.initialize_env(self.env)
-        else:
-            self.teach_current_state = next_state
+        # if done:
+        #     self.teach_current_state = self.initialize_env(self.env)
+        # else:
+        #     self.teach_current_state = next_state
 
 
         batch = self.replay_memory.sample()
@@ -558,7 +564,9 @@ class DQN_Agent():
         
         env = gym.make(self.environment_name)
         done = False
+        print(self.environment_name)
         current_state = self.initialize_env(env)
+        print(current_state.shape)
         epsilon = self.teach_epsilon
         for i in range(self.burn_in):
             q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
@@ -611,21 +619,25 @@ def main(args):
     # # agent.train()
 
     num_update = 10000000
-    environment_name_lst = ["MountainCar-v0"]
+    environment_name_lst = ["MountainCar-v0", "Acrobot-v1"]
+    model_path_lst = ["./expert/mountaincar/MountainCar-v0-243",
+                      "./expert/acrobot/Acrobot-0"]
     teacher_agent_lst = []
     student_network_lst = []
     num_env = len(environment_name_lst)
     frequency_report_loss = 10
+
     # initilze the teacher agent and student network
-    for _env_name in environment_name_lst:
-        teacher_agent_lst.append(DQN_Agent(_env_name,
+    for idx_env in range(num_env):
+        teacher_agent_lst.append(DQN_Agent(environment_name=environment_name_lst[idx_env],
                                            network_name='mlp',
                                            logger=logger,
-                                           model="./expert/mountaincar/MountainCar-v0-243",
+                                           model=model_path_lst[idx_env],
                                            train_model=0,
                                            teach_model=1,
-                                           burn_in=100))
-        student_network_lst.append(QNetwork(_env_name,
+                                           burn_in=500,
+                                           batch_size=10))
+        student_network_lst.append(QNetwork(environment_name=environment_name_lst[idx_env],
                                             actor_mimic=True,
                                             learning_rate = 0.01))
 
@@ -644,8 +656,9 @@ def main(args):
             # the network in the list
             student_network.update_actor_mimic_network(batch_state_lst,
                                                        batch_q_values_lst)
+
             loss += student_network.calculate_actor_mimic_cost().eval(session = student_network.session, feed_dict = {
-            	student_network.state_input : batch_state_lst, student_network.expert_q_values : batch_q_values_lst})
+              student_network.state_input : batch_state_lst, student_network.expert_q_values : batch_q_values_lst})
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[next_student_network_idx]
@@ -655,7 +668,7 @@ def main(args):
 
 
             if ((idx_update % frequency_report_loss) == 0):
-                print(loss / frequency_report_loss)
+                print("Task: " + environment_name_lst[idx] + loss / frequency_report_loss)
                 # student_network.save_model("./" + environment_name_lst[idx], idx_update)
                 student_agent = DQN_Agent(environment_name_lst[idx],
                                            network_name='mlp',
