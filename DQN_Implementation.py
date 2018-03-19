@@ -270,7 +270,7 @@ class DQN_Agent():
 			raise Exception("Wrong agent model, agent can only do one thing between train and teach model")
 		elif (train_model):
 			self.burn_in_memory()
-		else:
+		elif (teach_model):
 			self.teach_burn_in_memory()
 			# flag to keep the status for enviroment in the teach mode
 			self.teach_done = False
@@ -458,7 +458,7 @@ class DQN_Agent():
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
 
-		episode_num = 5
+		episode_num = 1
 		total_reward = 0
 
 		env = gym.make(self.environment_name)
@@ -612,21 +612,24 @@ def main(args):
 	# # agent.train()
 
 	num_update = 10000000
-	environment_name_lst = ["MountainCar-v0"]
+	environment_name_lst = ["MountainCar-v0", "Acrobot-v1"]
+	model_path_lst = ["./expert/mountaincar/MountainCar-v0-243",
+					  "./expert/acrobot/Acrobot-0"]
 	teacher_agent_lst = []
 	student_network_lst = []
 	num_env = len(environment_name_lst)
-	frequency_report_loss = 10
+	frequency_report_loss = 100
 	# initilze the teacher agent and student network
-	for _env_name in environment_name_lst:
-		teacher_agent_lst.append(DQN_Agent(_env_name,
+	for idx in range(num_env):
+		teacher_agent_lst.append(DQN_Agent(environment_name=environment_name_lst[idx],
 										   network_name='mlp',
 										   logger=logger,
-										   model="./expert/mountaincar/MountainCar-v0-243",
+										   model=model_path_lst[idx],
 										   train_model=0,
 										   teach_model=1,
-										   burn_in=100))
-		student_network_lst.append(QNetwork(_env_name,
+										   burn_in=10000,
+										   batch_size=10))
+		student_network_lst.append(QNetwork(environment_name=environment_name_lst[idx],
 											actor_mimic=True,
 											learning_rate = 0.01))
 
