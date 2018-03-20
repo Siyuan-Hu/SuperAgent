@@ -141,11 +141,12 @@ class QNetwork():
 		self.optimizer = tf.get_collection("optimizer")[0]
 
 	def get_weight(self):
-		return self.w2, self.b2
+		return self.w2.eval(session = self.session), self.b2.eval(session = self.session)
 
 	def set_weight(self, w, b):
-		self.w2 = w
-		self.b2 = b
+		# May need to add the ops to graph in initialization
+		self.session.run(self.w2.assign(w))
+		self.session.run(self.b2.assign(b))
 
 
 class Replay_Memory():
