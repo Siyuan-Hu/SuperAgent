@@ -187,7 +187,7 @@ class Actor(object):
 
         self.sess = tf.Session()
 
-        self.create_mlp()
+        self.mu,self.sigma,self.act_out=self.create_mlp()
         self.create_optimizer()
         self.sess.run(tf.global_variables_initializer())
 
@@ -222,6 +222,8 @@ class Actor(object):
         self.act_out = tf.reshape(self.normal_dist.sample(1), shape=[-1,1])
         self.act_out = tf.clip_by_value(self.act_out, self.action_low, self.action_high)
 
+        return self.mu,self.sigma,self.act_out
+
     def create_weights(self, shape):
         initial = tf.truncated_normal(shape, stddev = 0.1)
         return tf.Variable(initial)
@@ -240,6 +242,12 @@ class Actor(object):
 
     def get_action(self, state):
         return self.act_out.eval(session = self.sess, feed_dict={self.state_input: [state]})[0]
+
+    def get_mu(self,state):
+        return self.mu.eval(session =self.sess,feed_dict={self.state_input:[state]})[0]
+    def get_sigma(self,state):
+        return self.sigma.eval(session = self.sess,feed_dict={self.state_input:[state]})[0]
+
 
     def save_model(self, step):
         # Helper function to save your model.

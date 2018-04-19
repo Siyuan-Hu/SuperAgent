@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import keras, tensorflow as tf, numpy as np, gym, sys, copy, argparse
-
+from A2C_Continuous import Actor,Critic
 class MultitaskNetwork(object):
 	def __init__(self, source_environment_names, target_environment_name):
 		source_networks = []
@@ -183,7 +183,7 @@ class Replay_Memory():
 
 		self.memory.append(transition)
 
-class DQN_Agent():
+class Agent():
 
 	# In this class, we will implement functions to do the following. 
 	# (1) Create an instance of the Q Network class.
@@ -201,11 +201,10 @@ class DQN_Agent():
 				 save_path='tmp',
 				 render=False,
 				 episodes=1000000,
-				 epsilon_begin=0.5,
-				 epsilon_end=0.05,
-				 teach_epsilon=0.5,
 				 gamma=0.99,
-				 learning_rate=0.00001,
+				 actor_learning_rate=0.00001,
+				 critic_learning_rate = 0.0005,
+				 noise = 0.01,
 				 train_model=1,
 				 teach_model=0,
 				 model=None,
@@ -217,23 +216,16 @@ class DQN_Agent():
 				 frequency_update=1000,
 				 frequency_sychronize=10):
 
-		# Create an instance of the network itself, as well as the memory. 
-		# Here is also a good place to set environmental parameters,
-		# as well as training parameters - number of episodes / iterations, etc. 
-
-		# parameter for the gym enviroment
 		self.environment_name = environment_name
 		self.logger = logger
 		self.render = render
 		self.episodes = episodes
-		self.epsilon_begin = epsilon_begin
-		self.epsilon_end = epsilon_end
-		self.teach_epsilon = teach_epsilon
 		self.gamma = gamma
+		self.noise = noise
 
 		# parameter from the enviroment
 		self.env = gym.make(self.environment_name)
-		self.num_actions = self.env.action_space.n
+		self.num_actions = self.env.action_space.shape[0]
 		self.num_observation = self.env.observation_space.shape[0]
 
 		# parameter of frequency
@@ -247,7 +239,8 @@ class DQN_Agent():
 		self.replay_memory = Replay_Memory(self.batch_size,
 										   self.memory_size,
 										   self.burn_in)
-
+		self.actor_net = Actor(self.num_observation,self.actor_learning_rate,self.env.action_space.low,self.env.action_space.high)
+		self.critic_net = Critic(self.num_observation,self.critic_learning_rate)
 		# use monitor to generate video
 		if (open_monitor):
 			video_save_path = self.save_path + "/video/"
@@ -257,7 +250,8 @@ class DQN_Agent():
 
 		# parameter for the network
 		# self.resume = resume # whether use the pre-trained model
-		self.learning_rate = learning_rate
+		self.actor_learning_rate = actor_learning_rate
+		self.critic_learning_rate = critic_learning_rate
 		self.network_name = network_name
 
 		if model == None:
@@ -280,14 +274,6 @@ class DQN_Agent():
 		self.train_model = train_model # use this agent to train the teacher
 		self.teach_model = teach_model # use this agent as a teacher to teach the student
 
-		# initilize the network
-		# self.q_network = QNetwork(self.env,
-		#                           self.network_name,
-		#                           self.learning_rate)
-		
-		# ## TODO
-		# if (resume):
-		#     # self.q_network.load_model(pre-train_model_path)
 
 		# # if this agent is just to teach,
 		# # then there is no need of target_network
@@ -308,20 +294,22 @@ class DQN_Agent():
 		# return np.array([next_state]), reward, done, info
 		return next_state, reward, done, info
 
-	def epsilon_greedy_policy(self, q_values, epsilon):
-		# Creating epsilon greedy probabilities to sample from.
+	def get_actions(self,state):
+		# need to change this line
+		return self.q_network.get_action(state)
 
-		if (epsilon < np.random.rand()):
-			greedy_policy = self.greedy_policy(q_values)
-		else:
-			greedy_policy = self.env.action_space.sample()
+	def get_target_action(self,state):
+		return self.actor_net.get_action(state)
 
-		return greedy_policy
 
-	def greedy_policy(self, q_values):
-		# Creating greedy policy for test time. 
-		
-		return np.argmax(q_values)
+	def get_target_q(self,state):
+		return self.critic_net.get_critics(state)
+
+	def get_target_mu(self,state):
+		return self.actor_net.get_mu(state)
+
+	def get_target_sigma(self,state):
+		return self.actor_net.get_sigma(state)
 
 	def initialize_env(self, env):
 		# reset the env
@@ -339,120 +327,68 @@ class DQN_Agent():
 		episode_count = 0
 		update_count = 0
 		test_reward = []
-		# current_state = np.zeros(self.num_observation)
-		# next_state = np.zeros(self.num_observation)
-		epsilon_array = np.linspace(self.epsilon_begin,
-									self.epsilon_end,
-									num=self.episodes)
-		for epsilon in epsilon_array:
+
+
+		current_state = self.initialize_env(self.env)
+		done = False
+		reward_sum = 0
+
+		while not done:
 			
-			current_state = self.initialize_env(self.env)
-			done = False
-			reward_sum = 0
-			while not done:
-				
-				if episode_count % 20 == 0 and self.render:
-					self.env.render()
+			if episode_count % 20 == 0 and self.render:
+				self.env.render()
 
-				## TODO 
-				# need network module get_q_value function
-				q_values = self.q_network.get_q_values(current_state)
-				action = self.epsilon_greedy_policy(q_values,
-													epsilon)
-				next_state, reward, done, info = self.get_next_state(action,
-																	 self.env)
-				reward_sum += reward
+			## TODO 
+			# need network module get_q_value function
+			# need to modify line 329 330 
+			q_values = self.q_network.get_q_values(current_state)
+			action = self.get_actions(current_state)
+			mu = self.get_target_mu(current_state)
+			sigma = self.get_target_sigma(current_state)
+			#action = self.epsilon_greedy_policy(q_values,
+			#									epsilon)
+			next_state, _, _, _ = self.get_next_state(action,self.env)
 
-				# append to memory
-				self.replay_memory.append((current_state,
-										   action,
-										   reward,
-										   next_state,
-										   done))
 
-				# sample from the memory
-				batch = self.replay_memory.sample()
-				batch_state_lst = []
-				batch_q_target_lst = []
-				batch_action_lst = []
-				for tmp_state, tmp_action, tmp_reward, tmp_next_state, tmp_done in batch:
-					## TODO
-					## this can be done in batch maybe
-					## this maybe need to check again
-					action_one_hot = np.zeros(self.num_actions)
-					action_one_hot[tmp_action] = 1
-					q_target = 0
-					if (tmp_done):
-						q_target = tmp_reward
-					else:
-						tmp = self.q_network.get_q_values(tmp_next_state)
-						idx_max_action = self.greedy_policy(tmp)
-						q_target = tmp_reward + self.gamma * tmp[idx_max_action]                        
-						# q_target = tmp_reward + self.gamma * self.q_network.get_q_values(tmp_next_state)[idx_max_action]
+			# append to memory
+			self.replay_memory.append((current_state,
+									   action,
+									   q_values
+									   ))	
 
-					batch_state_lst.append(tmp_state)
-					batch_q_target_lst.append(q_target)
-					batch_action_lst.append(action_one_hot)
-
+			# sample from the memory
+			batch = self.replay_memory.sample()
+			batch_state_lst = []
+			batch_critic_target_lst = []
+			batch_action_lst = []
+			for tmp_state, tmp_action, tmp_critic in batch:
 				## TODO
-				self.q_network.update_dqn(batch_state_lst,
-										  batch_action_lst,
-										  batch_q_target_lst)
+				## this can be done in batch maybe
+				## this maybe need to check again
+				action_target = self.get_target_action(env,current_state)
+				#Actor(self.num_observation,self.actor_learning_rate,env.action_space.low,env.action_space.high).get_action(tmp_state)
+				q_target = self.get_target_q(env,current_state)
+				#Critic(self.num_observation,self.critic_learning_rate).get_critics(tmp_state)
+                
+				batch_state_lst.append(tmp_state)
+				batch_q_target_lst.append(q_target)
+				batch_action_lst.append(action_target)
 
-				# save and test q network
-				# frequency_update = 10000
-				# if update_count % self.frequency_update == 0:
-				#     self.test(update_count)
-				#     self.q_network.save_model_weights(self.save_path, update_count)
+			## TODO
+			self.q_network.update_dqn(batch_state_lst,
+									  batch_action_lst,
+									  batch_q_target_lst)
 
-				# sychronize the q_network with the target_network
-				# frequency_sychronize = 100
-				# if update_count % self.frequency_sychronize == 0:
-				#     ## TODO
-				#     self.target_network.sychronize_all_weights(self.q_network.get_all_weights())
+			current_state = next_state
 
-				# prepare for next
-				current_state = next_state
-				# if done:
-				#     self.logger.info('Episode[%d], Epsilon=%f, Train-Reward Sum=%f',
-				#                 episode_count,
-				#                 epsilon,
-				#                 reward_sum)
-				# if done:
-				#     print("episodes: " + str(episode_count) + "; reward_sum: " + str(reward_sum))
-				update_count += 1
-			if episode_count % 200 == 0:
-				self.test()
-			episode_count += 1
+			update_count += 1
+		env.close()
+		if episode_count % 200 == 0:
+			self.test()
+		episode_count += 1
 
 
-	# def test(self, update_count, model_file=None):
-	#     # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
-	#     # Here you need to interact with the environment, irrespective of whether you are using a memory. 
 
-	#     reward_sum_lst = []
-	#     env = gym.make(self.environment_name)
-	#     num_test = 10
-	#     epsilon = 0.05
-	#     for _ in range(num_test):
-	#         done = False
-	#         current_state = self.initialize_env(env)
-	#         reward_sum = 0
-	#         while not done:
-	#             q_values = self.q_network.get_q_values(current_state)
-	#             action = self.epsilon_greedy_policy(q_values,
-	#                                                 epsilon)
-	#             next_state, reward, done, info = self.get_next_state(action,
-	#                                                                  env)
-	#             reward_sum += reward
-	#             current_state = next_state
-	#             if done:
-	#                 reward_sum_lst.append(reward_sum)
-
-	#     self.logger.info('Update[%d], Test-Reward: Mean=%f, STD=%f',
-	#                 update_count,
-	#                 np.mean(reward_sum_lst),
-	#                 np.std(reward_sum_lst))
 
 	def test(self):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
@@ -471,7 +407,7 @@ class DQN_Agent():
 				q_values = self.q_network.get_q_values(state)
 
 				env.render()
-				action = self.epsilon_greedy_policy(q_values, self.epsilon_end)
+				action = self.get_actions(state)
 
 				state, reward, done, info = env.step(action)
 
@@ -482,6 +418,7 @@ class DQN_Agent():
 		env.close()
 		return ave_reward
 
+
 	def burn_in_memory(self):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
 
@@ -491,13 +428,21 @@ class DQN_Agent():
 		done = False
 		current_state = self.initialize_env(env)
 		for i in range(self.burn_in):
+			#a_high = env.action_space.high
+			#a_low = env.action_space.low
+			#action = self.get_target_action(current_state)
+			#mu = self.get_target_mu(current_state)
+			#sigma = self.get_target_sigma(current_state)
+			#action = np.clip(np.random.normal(loc = mu,scale=sigma),env.action_space.low,env.action_space.high)
+
+			#+np.random.randn(num_actions)*self.noise
+			#Actor(self.num_observation,self.actor_learning_rate,env.action_space.low,env.action_space.high).get_action(tmp_state)
 			action = env.action_space.sample()
 			next_state, reward, done, info = self.get_next_state(action, env)
+			critic_value = self.get_target_q(current_state)
 			self.replay_memory.append((current_state,
 									   action,
-									   reward,
-									   next_state,
-									   done))
+									   critic_value))
 			if done:
 				current_state = self.initialize_env(env)
 			else:
@@ -505,37 +450,25 @@ class DQN_Agent():
 		env.close()
 
 
-	def teach(self):
+	def teach(self,env):
 		# every time call this func, 
 		# (1), it will append a new episode into the replay memory with
 		#      every step's current_state and q_values
 		# (2), return the sample batch of current_state and q_values
 
-		epsilon = self.teach_epsilon
-
-		# current_state = self.initialize_env(self.env)
-		# done = False
-		# while not done:
-		#     q_values = self.q_network.get_boltzmann_distribution_over_q_values([current_state])[0]
-		#     action = self.epsilon_greedy_policy(q_values,
-		#                                         epsilon)
-		#     next_state, reward, done, info = self.get_next_state(action,
-		#                                                          self.env)
-
-		#     self.replay_memory.append((current_state,
-		#                                q_values))
-		#     current_state = next_state
-		#     # just append one step into memory
-		#     break
 
 		current_state = self.teach_current_state
 
 		q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
-		action = self.epsilon_greedy_policy(q_values,
-											epsilon)
+		action = self.get_actions(current_state)
+		#mu = self.get_target_mu(current_state)
+		#sigma = self.get_target_sigma(current_state)
+		#action = np.clip(np.random.normal(loc = mu,scale=sigma),env.action_space.low,env.action_space.high)
+
 		next_state, _, done, _ = self.get_next_state(action,
 													 self.env)
 		self.replay_memory.append((current_state,
+									action,
 								   q_values))
 
 		if done:
@@ -547,12 +480,13 @@ class DQN_Agent():
 		batch = self.replay_memory.sample()
 
 		batch_state_lst = []
+		batch_action_lst = []
 		batch_q_values_lst = []
-		for tmp_state, tmp_q_values in batch:
+		for tmp_state,tmp_action ,tmp_q_values in batch:
 			batch_state_lst.append(tmp_state)
 			batch_q_values_lst.append(tmp_q_values)
-
-		return batch_state_lst, batch_q_values_lst
+			batch_action_lst.append(tmp_action)
+		return batch_state_lst, batch_action_lst,batch_q_values_lst
 
 
 	def teach_burn_in_memory(self):
@@ -560,15 +494,15 @@ class DQN_Agent():
 		env = gym.make(self.environment_name)
 		done = False
 		current_state = self.initialize_env(env)
-		epsilon = self.teach_epsilon
+
 		for i in range(self.burn_in):
 			q_values = self.q_network.get_boltzmann_distribution_over_q_values(current_state)
-			action = self.epsilon_greedy_policy(q_values,
-												epsilon)
+			action = self.get_actions(current_state)
 
 			next_state, _, done, _ = self.get_next_state(action,
 														 env)
 			self.replay_memory.append((current_state,
+										action,
 									   q_values))
 			if done:
 				current_state = self.initialize_env(env)
