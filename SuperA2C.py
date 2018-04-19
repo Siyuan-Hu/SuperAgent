@@ -576,6 +576,38 @@ class DQN_Agent():
 				current_state = next_state
 		env.close()
 
+from A2C_Continuous import Actor, Critic
+
+class StudentNetwork(object):
+	"""docstring for StudentNetwork"""
+	def __init__(self, num_observation, actor_lr, critic_lr, action_low, action_high):
+		self.actor = Actor(num_observation=num_observation,
+						   lr=actor_lr,
+						   action_low=action_low,
+						   action_high=action_high)
+		self.target_mu = tf.placeholder(tf.float32, [None, 1])
+		self.target_sigma = tf.placeholder(tf.float32, [None, 1])
+		actor_loss = tf.reduce_mean(tf.square(tf.subtract(self.target_mu, self.actor.mu)) + tf.square(tf.subtract(self.target_sigma, self.actor.sigma)) )
+		self.actor_optimizer = tf.train.AdamOptimizer(actor_lr).minimize(actor_loss, name="actor_optimizer")
+		self.actor.sess.run(tf.global_variables_initializer())
+
+
+		self.critic = Critic(num_observation=num_observation,
+							 lr=critic_lr)
+		self.target_v = tf.placeholder(tf.float32, [None, 1])
+		critic_loss = tf.reduce_mean(tf.square(tf.subtract(self.target_v, self.critic.q_values)))
+		self.critic_optimizer = tf.train.AdamOptimizer(critic_lr).minimize(critic_loss, name="critic_optimizer")
+		self.critic.sess.run(tf.global_variables_initializer())
+
+	def train_actor(self, states, mu, sigma):
+		self.actor_optimizer.run(session=self.actor.sess, feed_dict={self.actor.state_input: states,
+																	 self.target_mu: mu,
+																	 self.target_sigma: sigma})
+
+	def train_critic(self, states, v):
+		self.critic_optimizer.run(session=self.critic.sess, feed_dict={self.critic.state_input: states,
+																	   self.target_v: v})
+
 def parse_arguments():
 	parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
 	parser.add_argument('--env',dest='env',type=str)
