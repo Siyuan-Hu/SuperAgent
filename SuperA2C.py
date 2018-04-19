@@ -608,6 +608,22 @@ class StudentNetwork(object):
 		self.critic_optimizer.run(session=self.critic.sess, feed_dict={self.critic.state_input: states,
 																	   self.target_v: v})
 
+	def get_actor_weight(self):
+		return self.actor.w_mu, self.actor.b_mu, self.actor.w_sigma, self.actor.b_sigma
+
+	def set_actor_weight(self, w_mu, b_mu, w_sigma, b_sigma):
+		self.actor.w_mu = w_mu
+		self.actor.b_mu = b_mu
+		self.actor.w_sigma = w_sigma
+		self.actor.b_sigma = b_sigma
+
+	def get_critic_weight(self):
+		return self.critic.w2, self.critic.b2
+
+	def set_critic_weight(self, w, b):
+		self.critic.w2 = w
+		self.critic.b2 = b
+
 def parse_arguments():
 	parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
 	parser.add_argument('--env',dest='env',type=str)
