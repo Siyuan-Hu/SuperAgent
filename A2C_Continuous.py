@@ -268,7 +268,7 @@ class Critic(object):
         if model != None:
             self.load_model(model)
         else:
-            self.create_mlp()
+            self.q_values =self.create_mlp()
             self.create_optimizer()
             self.sess.run(tf.global_variables_initializer())
 
@@ -289,6 +289,7 @@ class Critic(object):
         self.w2 = self.create_weights([self.hidden_units, 1])
         self.b2 = self.create_bias([1])
         self.q_values = tf.add(tf.matmul(h_layer, self.w2), self.b2, name = "q_values")
+        return self.q_values
 
     def create_weights(self, shape):
         initial = tf.truncated_normal(shape, stddev = 0.1)
