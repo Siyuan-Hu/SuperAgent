@@ -283,18 +283,12 @@ class Critic(object):
         if model != None:
             self.load_model(model)
         else:
-<<<<<<< HEAD
-            self.q_values =self.create_mlp()
-            self.create_optimizer()
-            self.sess.run(tf.global_variables_initializer())
-=======
             self.graph = tf.Graph()
             self.sess = tf.Session(graph = self.graph)
             with self.graph.as_default():
                 self.create_mlp()
                 self.create_optimizer()
                 self.sess.run(tf.global_variables_initializer())
->>>>>>> save and load a2c
 
     def train(self, states, R):
         self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.target_q_value: R})
@@ -375,10 +369,10 @@ def main(args):
     # Create the environment.
     env = gym.make(ENVIROMENT)
     
-    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render)#, model_step = 1300)
+    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render, model_step = 1200)
 
-    a2c.train()
-    # print(a2c.test(0, True))
+    # a2c.train()
+    print(a2c.test(0, True))
 
     # TODO: Train the model using A2C and plot the learning curves.
 
