@@ -221,7 +221,7 @@ class Agent():
 			action = self.get_target_action(current_state)
 			mu = self.get_target_mu(current_state)
 			sigma = self.get_target_sigma(current_state)
-			next_state, _,_, _ = self.get_next_state(action,
+			next_state, _,done, _ = self.get_next_state(action,
 														 env)
 			self.replay_memory.append((current_state,
 										mu,
