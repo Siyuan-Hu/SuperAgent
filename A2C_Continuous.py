@@ -9,9 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from reinforce import Reinforce
-
-ENVIROMENT = 'InvertedDoublePendulum-v2'
+ENVIROMENT = 'InvertedPendulum-v2'
 
 class A2C(object):
     # Implementation of N-step Advantage Actor Critic.
@@ -39,23 +37,21 @@ class A2C(object):
         self.N_step = N_step
 
         # # enviroment
-        # num_action = env.action_space.n
+        num_action = env.action_space.shape[0]
         num_observation = env.observation_space.shape[0]
         self.num_episodes = num_episodes
         self.render = render
         self.discount_factor = discount_factor
 
-        # # model
-        # if model_step == None:
-        #     self.actor_model = Actor(model_config_path, num_action, actor_lr)
-        #     self.critic_model = Critic(num_observation, critic_lr)
-        # else:
-        #     self.load_models(model_config_path, num_observation, num_action, actor_lr, critic_lr, model_step)
-
-
         self.env = gym.make(ENVIROMENT)
-        self.actor_model = Actor(num_observation, actor_lr, env.action_space.low, env.action_space.high)
-        self.critic_model = Critic(num_observation, critic_lr)
+
+        # model
+        if model_step == None:
+            self.actor_model = Actor(num_observation, num_action, actor_lr, env.action_space.low, env.action_space.high)
+            self.critic_model = Critic(num_observation, critic_lr)
+        else:
+            self.load_models(num_observation, num_action, actor_lr, critic_lr, env.action_space.low, env.action_space.high, model_step)
+
 
 
     def train(self, gamma=1.0):
@@ -70,6 +66,7 @@ class A2C(object):
                                                              render=self.render)
             R, G = self.episode_reward2G_Nstep(states=states, actions=actions, rewards=rewards, 
                 gamma=gamma, N_step=self.N_step, discount_factor=self.discount_factor)
+            # print(np.vstack(G).shape)
             self.actor_model.train(np.vstack(states), np.vstack(G), np.vstack(actions))
             self.critic_model.train(np.vstack(states), np.vstack(R))
 
@@ -77,20 +74,20 @@ class A2C(object):
                 reward, std = self.test(i)
                 file.write(str(reward)+" "+str(std)+"\n")
                 print(reward, std)
-                if reward > max_reward:
-                    # self.save_models(i)
+                if reward >= max_reward:
+                    self.save_models(i)
                     max_reward = reward
 
         file.close()
 
-    def test(self, epc_idx):
+    def test(self, epc_idx, render=False):
         log_dir = './log'
         name_mean = 'test10_reward'
         name_std = 'test10_std'
         num_test = 10
         total_array = np.zeros(num_test)
         for j in range(num_test):
-            _, _, rs = self.generate_episode(self.env)
+            _, _, rs = self.generate_episode(self.env, render)
             total_array[j] = np.sum(rs)
 
         summary_var(log_dir, name_mean, np.mean(total_array), epc_idx)
@@ -147,9 +144,9 @@ class A2C(object):
         self.actor_model.save_model(model_step)
         self.critic_model.save_model(model_step)
 
-    def load_models(self, model_config_path, num_observation, num_action, actor_lr, critic_lr, model_step):
-        self.actor_model = Actor(model_config_path, num_action, actor_lr, model = "./models/actor-"+str(model_step)+".h5")
-        self.critic_model = Critic(num_observation, critic_lr, model = "./models/critic-"+str(model_step))
+    def load_models(self, num_observation, num_action, actor_lr, critic_lr, action_low, action_high, model_step):
+        self.actor_model = Actor(num_observation, num_action, actor_lr, action_low, action_high, model = "./models/actor/actor-"+str(model_step))
+        self.critic_model = Critic(num_observation, critic_lr, model = "./models/critic/critic-"+str(model_step))
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -179,17 +176,23 @@ def parse_arguments():
     return parser.parse_args()
 
 class Actor(object):
-    def __init__(self, num_observation, lr, action_low, action_high):
+    def __init__(self, num_observation, num_action, lr, action_low, action_high, model = None):
         self.num_observation = num_observation
+        self.num_action = num_action
         self.learning_rate = lr
         self.action_low = action_low
         self.action_high = action_high
 
-        self.sess = tf.Session()
 
-        self.mu,self.sigma,self.act_out=self.create_mlp()
-        self.create_optimizer()
-        self.sess.run(tf.global_variables_initializer())
+        if model != None:
+            self.load_model(model)
+        else:
+            self.graph = tf.Graph()
+            self.sess = tf.Session(graph = self.graph)
+            with self.graph.as_default():
+                self.create_mlp()
+                self.create_optimizer()
+                self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, G, actions):
         self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.G: G, self.action: actions})
@@ -199,7 +202,7 @@ class Actor(object):
         self.hidden_units = 200
 
         self.G = tf.placeholder(tf.float32, [None, 1], name = 'G')
-        self.action = tf.placeholder(tf.float32, [None, 1], name = 'action')
+        self.action = tf.placeholder(tf.float32, [None, self.num_action], name = 'action')
 
         self.w1 = self.create_weights([self.num_observation, self.hidden_units])
         self.b1 = self.create_bias([self.hidden_units])
@@ -208,19 +211,19 @@ class Actor(object):
 
         h_layer = tf.nn.relu(tf.matmul(self.state_input, self.w1) + self.b1)
 
-        self.w_mu = self.create_weights([self.hidden_units, 1])
-        self.b_mu = self.create_bias([1])
+        self.w_mu = self.create_weights([self.hidden_units, self.num_action])
+        self.b_mu = self.create_bias([self.num_action])
         self.mu = tf.nn.tanh(tf.add(tf.matmul(h_layer, self.w_mu), self.b_mu), name = "mu")
 
-        self.w_sigma = self.create_weights([self.hidden_units, 1])
-        self.b_sigma = self.create_bias([1])
+        self.w_sigma = self.create_weights([self.hidden_units, self.num_action])
+        self.b_sigma = self.create_bias([self.num_action])
         self.sigma = tf.nn.softplus(tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma), name = "sigma")
 
         self.mu, self.sigma = self.mu * self.action_high, self.sigma + 1e-4
 
         self.normal_dist = tf.distributions.Normal(loc=self.mu, scale=self.sigma)
-        self.act_out = tf.reshape(self.normal_dist.sample(1), shape=[-1,1])
-        self.act_out = tf.clip_by_value(self.act_out, self.action_low, self.action_high)
+        self.act_out = tf.reshape(self.normal_dist.sample(1), shape=[-1, self.num_action])
+        self.act_out = tf.clip_by_value(self.act_out, self.action_low, self.action_high, name = "act_out")
 
         return self.mu,self.sigma,self.act_out
 
@@ -254,11 +257,22 @@ class Actor(object):
 
     def save_model(self, step):
         # Helper function to save your model.
-        self.model.save_weights("./models/actor-"+str(step)+".h5")
+        with self.graph.as_default():
+            saver = tf.train.Saver()
+        self.sess.graph.add_to_collection("optimizer", self.optimizer)
+        saver.save(self.sess, "./models/actor/actor", global_step = step)
 
     def load_model(self, model_file):
         # Helper function to load an existing model.
-        self.model.load_weights(model_file)
+        self.graph = tf.Graph()
+        self.sess = tf.Session(graph = self.graph)
+        with self.graph.as_default():
+            saver = tf.train.import_meta_graph(model_file + '.meta')
+            saver.restore(self.sess, model_file)
+
+        self.act_out = self.graph.get_tensor_by_name("act_out:0")
+        self.state_input = self.graph.get_tensor_by_name("state_input:0")
+        self.optimizer = self.graph.get_collection("optimizer")[0]
 
 class Critic(object):
     def __init__(self, num_observation, lr, model = None):
@@ -266,14 +280,15 @@ class Critic(object):
         self.num_observation = num_observation
         self.learning_rate = lr
 
-        self.sess = tf.Session()
-
         if model != None:
             self.load_model(model)
         else:
-            self.q_values =self.create_mlp()
-            self.create_optimizer()
-            self.sess.run(tf.global_variables_initializer())
+            self.graph = tf.Graph()
+            self.sess = tf.Session(graph = self.graph)
+            with self.graph.as_default():
+                self.create_mlp()
+                self.create_optimizer()
+                self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, R):
         self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.target_q_value: R})
@@ -313,22 +328,23 @@ class Critic(object):
 
     def save_model(self, step):
         # Helper function to save your model.
-        saver = tf.train.Saver()
+        with self.graph.as_default():
+            saver = tf.train.Saver()
         self.sess.graph.add_to_collection("optimizer", self.optimizer)
-        saver.save(self.sess, "./models/critic", global_step = step)
+        saver.save(self.sess, "./models/critic/critic", global_step = step)
 
     def load_model(self, model_file):
         # Helper function to load an existing model.
-        tf.reset_default_graph()
-        self.sess = tf.Session()
-        saver = tf.train.import_meta_graph(model_file + '.meta')
-        saver.restore(self.sess, model_file)
+        self.graph = tf.Graph()
+        self.sess = tf.Session(graph = self.graph)
+        with self.graph.as_default():
+            saver = tf.train.import_meta_graph(model_file + '.meta')
+            saver.restore(self.sess, model_file)
 
-        graph = tf.get_default_graph()
-        self.q_values = graph.get_tensor_by_name("q_values:0")
-        self.state_input = graph.get_tensor_by_name("state_input:0")
-        self.target_q_value = graph.get_tensor_by_name("target_q_value:0")
-        self.optimizer = graph.get_collection("optimizer")[0]
+        self.q_values = self.graph.get_tensor_by_name("q_values:0")
+        self.state_input = self.graph.get_tensor_by_name("state_input:0")
+        self.target_q_value = self.graph.get_tensor_by_name("target_q_value:0")
+        self.optimizer = self.graph.get_collection("optimizer")[0]
 
 from tensorflow.core.framework import summary_pb2
 def summary_var(log_dir, name, val, step):
@@ -353,9 +369,10 @@ def main(args):
     # Create the environment.
     env = gym.make(ENVIROMENT)
     
-    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render)#, model_step = 7400)
+    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render, model_step = 1200)
 
-    a2c.train()
+    # a2c.train()
+    print(a2c.test(0, True))
 
     # TODO: Train the model using A2C and plot the learning curves.
 

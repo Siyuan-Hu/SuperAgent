@@ -1,0 +1,2 @@
+model_checkpoint_path: "actor-3500"
+all_model_checkpoint_paths: "actor-3500"
