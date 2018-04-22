@@ -243,10 +243,13 @@ class Actor(object):
     def get_action(self, state):
         return self.act_out.eval(session = self.sess, feed_dict={self.state_input: [state]})[0]
 
-    def get_mu(self,state):
-        return self.mu.eval(session =self.sess,feed_dict={self.state_input:[state]})[0]
-    def get_sigma(self,state):
-        return self.sigma.eval(session = self.sess,feed_dict={self.state_input:[state]})[0]
+    def get_action_set(self,state):
+        return self.sess.run([self.act_out,self.mu,self.sigma],feed_dict={self.state_input:states})
+ 
+    #def get_mu(self,state):
+        #return self.mu.eval(session =self.sess,feed_dict={self.state_input:[state]})[0]
+    #def get_sigma(self,state):
+        #return self.sigma.eval(session = self.sess,feed_dict={self.state_input:[state]})[0]
 
 
     def save_model(self, step):

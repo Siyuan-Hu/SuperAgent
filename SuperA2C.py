@@ -168,17 +168,18 @@ class Agent():
 		# return np.array([next_state]), reward, done, info
 		return next_state, reward, done, info
 
-	def get_target_action(self,state):
-		return self.actor_net.get_action(state)
+	def get_target(self,state):
+		
+		return self.actor_net.get_action_set(state)
 
 	def get_target_q(self,state):
 		return self.critic_net.get_critics(state)
 
-	def get_target_mu(self,state):
-		return self.actor_net.get_mu(state)
+	#def get_target_mu(self,state):
+	#	return self.actor_net.get_mu(state)
 
-	def get_target_sigma(self,state):
-		return self.actor_net.get_sigma(state)
+	#def get_target_sigma(self,state):
+	#	return self.actor_net.get_sigma(state)
 
 
 	def initialize_env(self, env):
@@ -218,9 +219,12 @@ class Agent():
 
 		for i in range(self.burn_in):
 			q_values = self.get_target_q(current_state)
-			action = self.get_target_action(current_state)
-			mu = self.get_target_mu(current_state)
-			sigma = self.get_target_sigma(current_state)
+			
+			action,mu,sigma = self.get_target(current_state)
+
+			#action = self.get_target_action(current_state)
+			#mu = self.get_target_mu(current_state)
+			#sigma = self.get_target_sigma(current_state)
 			next_state, _,done, _ = self.get_next_state(action,
 														 env)
 			self.replay_memory.append((current_state,
