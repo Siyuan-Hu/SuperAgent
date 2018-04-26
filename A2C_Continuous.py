@@ -213,15 +213,15 @@ class Actor(object):
 
         self.w_mu = self.create_weights([self.hidden_units, self.num_action])
         self.b_mu = self.create_bias([self.num_action])
-        self.mu = tf.nn.tanh(tf.add(tf.matmul(h_layer, self.w_mu), self.b_mu), name = "mu")
+        self.mu = tf.nn.tanh(tf.add(tf.matmul(h_layer, self.w_mu), self.b_mu))
 
         self.w_sigma = self.create_weights([self.hidden_units, self.num_action])
         self.b_sigma = self.create_bias([self.num_action])
-        self.sigma = tf.nn.softplus(tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma), name = "sigma")
+        self.sigma = tf.nn.softplus(tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma))
 
-        # self.mu = tf.multiply(self.mu, self.action_high, name = "mu")
-        # self.sigma = tf.add(self.sigma, 1e-4, name = "sigma")
-        self.mu, self.sigma = self.mu * self.action_high, self.sigma + 1e-4
+        self.mu = tf.multiply(self.mu, self.action_high, name = "mu")
+        self.sigma = tf.add(self.sigma, 1e-4, name = "sigma")
+        # self.mu, self.sigma = self.mu * self.action_high, self.sigma + 1e-4
 
         self.normal_dist = tf.distributions.Normal(loc=self.mu, scale=self.sigma)
         self.act_out = tf.reshape(self.normal_dist.sample(1), shape=[-1, self.num_action])

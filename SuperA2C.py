@@ -249,10 +249,9 @@ def main(args):
     num_update = 10000000
 
     # , "InvertedDoublePendulum-v2"]
-    environment_name_lst = ["InvertedPendulum-v2"]
-    model_dir_lst = ["./expert_mujoco/InvertedPendulum-v2"]  # ,
-    # "./expert_mujoco/InvertedDoublePendulum-v2"]
-    model_step_lst = [3500]  # , 16400]
+    environment_name_lst = ["InvertedPendulum-v2", "InvertedDoublePendulum-v2"]
+    model_dir_lst = ["./expert_mujoco/InvertedPendulum-v2", "./expert_mujoco/InvertedDoublePendulum-v2"]
+    model_step_lst = [1400, 16400]
 
     # environment_name_lst = ["InvertedDoublePendulum-v2"]
     # model_dir_lst = ["./expert_mujoco/InvertedDoublePendulum-v2"]
@@ -263,8 +262,8 @@ def main(args):
     num_env = len(environment_name_lst)
     frequency_report_loss = 100
 
-    actor_lr = 1e-2
-    critic_lr = 1e-2
+    actor_lr = 1e-3
+    critic_lr = 1e-3
 
     # initilze the teacher agent and student network
     for idx in range(num_env):
