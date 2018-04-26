@@ -62,7 +62,7 @@ class A2C(object):
         test_frequence = 100
         self.gamma_N_step = gamma ** self.N_step
         for i in range(self.num_episodes):
-            states, actions, rewards = self.generate_episode(env=self.env,
+            states, actions, rewards = self.actor_model.generate_episode(env=self.env,
                                                              render=self.render)
             R, G = self.episode_reward2G_Nstep(states=states, actions=actions, rewards=rewards, 
                 gamma=gamma, N_step=self.N_step, discount_factor=self.discount_factor)
@@ -71,7 +71,7 @@ class A2C(object):
             self.critic_model.train(np.vstack(states), np.vstack(R))
 
             if (i % test_frequence == 0):
-                reward, std = self.test(i)
+                reward, std = self.actor_model.test(self.env, i)
                 file.write(str(reward)+" "+str(std)+"\n")
                 print(reward, std)
                 if reward >= max_reward:
@@ -79,46 +79,6 @@ class A2C(object):
                     max_reward = reward
 
         file.close()
-
-    def test(self, epc_idx, render=False):
-        log_dir = './log'
-        name_mean = 'test10_reward'
-        name_std = 'test10_std'
-        num_test = 10
-        total_array = np.zeros(num_test)
-        for j in range(num_test):
-            _, _, rs = self.generate_episode(self.env, render)
-            total_array[j] = np.sum(rs)
-
-        summary_var(log_dir, name_mean, np.mean(total_array), epc_idx)
-        summary_var(log_dir, name_std, np.std(total_array), epc_idx)
-
-        return np.mean(total_array), np.std(total_array)
-
-    def generate_episode(self, env, render=False):
-        # Generates an episode by running the given model on the given env.
-        # Returns:
-        # - a list of states, indexed by time step
-        # - a list of actions, indexed by time step
-        # - a list of rewards, indexed by time step
-        states = []
-        actions = []
-        rewards = []
-
-        state = env.reset()
-        num_observation = env.observation_space.shape[0]
-        while True:
-            if render:
-                env.render()
-            action = self.actor_model.get_action(state)
-            states.append(state)
-            actions.append(action)
-            state, reward, done, info = env.step(action)
-            rewards.append(reward)
-            if done:
-                break
-
-        return states, actions, rewards
 
     def episode_reward2G_Nstep(self, states, actions, rewards, gamma, N_step, discount_factor):
         ## TODO
@@ -197,6 +157,46 @@ class Actor(object):
     def train(self, states, G, actions):
         self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.G: G, self.action: actions})
 
+    def test(self, env, epc_idx, render=False):
+        log_dir = './log'
+        name_mean = 'test10_reward'
+        name_std = 'test10_std'
+        num_test = 10
+        total_array = np.zeros(num_test)
+        for j in range(num_test):
+            _, _, rs = self.generate_episode(env, render)
+            total_array[j] = np.sum(rs)
+
+        summary_var(log_dir, name_mean, np.mean(total_array), epc_idx)
+        summary_var(log_dir, name_std, np.std(total_array), epc_idx)
+
+        return np.mean(total_array), np.std(total_array)
+
+    def generate_episode(self, env, render=False):
+        # Generates an episode by running the given model on the given env.
+        # Returns:
+        # - a list of states, indexed by time step
+        # - a list of actions, indexed by time step
+        # - a list of rewards, indexed by time step
+        states = []
+        actions = []
+        rewards = []
+
+        state = env.reset()
+        num_observation = env.observation_space.shape[0]
+        while True:
+            if render:
+                env.render()
+            action = self.get_action(state)
+            states.append(state)
+            actions.append(action)
+            state, reward, done, info = env.step(action)
+            rewards.append(reward)
+            if done:
+                break
+
+        return states, actions, rewards
+
     def create_mlp(self):
         # Craete multilayer perceptron (one hidden layer with 20 units)
         self.hidden_units = 200
@@ -219,6 +219,8 @@ class Actor(object):
         self.b_sigma = self.create_bias([self.num_action])
         self.sigma = tf.nn.softplus(tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma), name = "sigma")
 
+        # self.mu = tf.multiply(self.mu, self.action_high, name = "mu")
+        # self.sigma = tf.add(self.sigma, 1e-4, name = "sigma")
         self.mu, self.sigma = self.mu * self.action_high, self.sigma + 1e-4
 
         self.normal_dist = tf.distributions.Normal(loc=self.mu, scale=self.sigma)
@@ -247,13 +249,7 @@ class Actor(object):
         return self.act_out.eval(session = self.sess, feed_dict={self.state_input: [state]})[0]
 
     def get_action_set(self,state):
-        return self.sess.run([self.act_out,self.mu,self.sigma],feed_dict={self.state_input:states})
- 
-    #def get_mu(self,state):
-        #return self.mu.eval(session =self.sess,feed_dict={self.state_input:[state]})[0]
-    #def get_sigma(self,state):
-        #return self.sigma.eval(session = self.sess,feed_dict={self.state_input:[state]})[0]
-
+        return self.sess.run([self.act_out,self.mu,self.sigma],feed_dict={self.state_input:state})
 
     def save_model(self, step):
         # Helper function to save your model.
@@ -270,6 +266,8 @@ class Actor(object):
             saver = tf.train.import_meta_graph(model_file + '.meta')
             saver.restore(self.sess, model_file)
 
+        self.mu = self.graph.get_tensor_by_name("mu:0")
+        self.sigma = self.graph.get_tensor_by_name("sigma:0")
         self.act_out = self.graph.get_tensor_by_name("act_out:0")
         self.state_input = self.graph.get_tensor_by_name("state_input:0")
         self.optimizer = self.graph.get_collection("optimizer")[0]
@@ -369,10 +367,10 @@ def main(args):
     # Create the environment.
     env = gym.make(ENVIROMENT)
     
-    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render, model_step = 1200)
+    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render)# model_step = 1200)
 
-    # a2c.train()
-    print(a2c.test(0, True))
+    a2c.train()
+    # print(a2c.test(0, True))
 
     # TODO: Train the model using A2C and plot the learning curves.
 
