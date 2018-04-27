@@ -160,6 +160,7 @@ class Actor(object):
             with self.graph.as_default():
                 self.create_mlp()
                 self.create_optimizer()
+                self.add_assign_tensor()
                 self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, G, actions):
@@ -290,6 +291,19 @@ class Actor(object):
         self.state_input = self.graph.get_tensor_by_name("state_input:0")
         self.optimizer = self.graph.get_collection("optimizer")[0]
 
+    def add_assign_tensor(self):
+        self.w_mu_value = tf.placeholder(
+            tf.float32, [self.hidden_units, self.num_action])
+        self.b_mu_value = tf.placeholder(tf.float32, [self.num_action])
+        self.w_sigma_value = tf.placeholder(
+            tf.float32, [self.hidden_units, self.num_action])
+        self.b_sigma_value = tf.placeholder(tf.float32, [self.num_action])
+
+        self.w_mu_assign = self.w_mu.assign(self.w_mu_value)
+        self.b_mu_assign = self.b_mu.assign(self.b_mu_value)
+        self.w_sigma_assign = self.w_sigma.assign(self.w_sigma_value)
+        self.b_sigma_assign = self.b_sigma.assign(self.b_sigma_value)
+
     def get_weight(self):
         w_mu, b_mu, w_sigma, b_sigma = self.sess.run(
             [self.w_mu, self.b_mu, self.w_sigma, self.b_sigma])
@@ -297,10 +311,12 @@ class Actor(object):
         return w_mu, b_mu, w_sigma, b_sigma
 
     def set_weight(self, w_mu, b_mu, w_sigma, b_sigma):
-        self.sess.run([self.w_mu.assign(w_mu),
-                       self.b_mu.assign(b_mu),
-                       self.w_sigma.assign(w_sigma),
-                       self.b_sigma.assign(b_sigma)])
+        # self.sess.run([self.w_mu.assign(w_mu),
+        #                self.b_mu.assign(b_mu),
+        #                self.w_sigma.assign(w_sigma),
+        #                self.b_sigma.assign(b_sigma)])
+        self.sess.run([self.w_mu_assign, self.b_mu_assign, self.w_sigma_assign, self.b_sigma_assign], feed_dict={
+            self.w_mu_value: w_mu, self.b_mu_value: b_mu, self.w_sigma_value: w_sigma, self.b_sigma_value: b_sigma})
 
 
 class Critic(object):
@@ -318,6 +334,7 @@ class Critic(object):
             with self.graph.as_default():
                 self.create_mlp()
                 self.create_optimizer()
+                self.add_assign_tensor()
                 self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, R):
@@ -383,14 +400,24 @@ class Critic(object):
         self.target_q_value = self.graph.get_tensor_by_name("target_q_value:0")
         self.optimizer = self.graph.get_collection("optimizer")[0]
 
+    def add_assign_tensor(self):
+        self.w2_value = tf.placeholder(
+            tf.float32, [self.hidden_units, 1])
+        self.b2_value = tf.placeholder(tf.float32, [1])
+
+        self.w2_assign = self.w2.assign(self.w2_value)
+        self.b2_assign = self.b2.assign(self.b2_value)
+
     def get_weight(self):
         w2, b2 = self.sess.run([self.w2, self.b2])
 
         return w2, b2
 
     def set_weight(self, w2, b2):
-        self.sess.run([self.w2.assign(w2),
-                       self.b2.assign(b2)])
+        # self.sess.run([self.w2.assign(w2),
+        #                self.b2.assign(b2)])
+        self.sess.run([self.w2_assign,
+                       self.b2_assign], feed_dict={self.w2_value: w2, self.b2_value: b2})
 
 from tensorflow.core.framework import summary_pb2
 
