@@ -70,21 +70,16 @@ class StudentAgent(object):
                                                                         self.target_sigma: sigma})
 
     def get_weight(self):
-        w_mu, b_mu, w_sigma, b_sigma = self.actor.sess.run(
-            [self.actor.w_mu, self.actor.b_mu, self.actor.w_sigma, self.actor.b_sigma])
+        w_mu, b_mu, w_sigma, b_sigma = self.actor.get_weight()
 
-        w2, b2 = self.critic.sess.run([self.critic.w2, self.critic.b2])
+        w2, b2 = self.critic.get_weight()
 
         return w_mu, b_mu, w_sigma, b_sigma, w2, b2
 
     def set_weight(self, w_mu, b_mu, w_sigma, b_sigma, w2, b2):
-        self.actor.sess.run([self.actor.w_mu.assign(w_mu),
-                             self.actor.b_mu.assign(b_mu),
-                             self.actor.w_sigma.assign(w_sigma),
-                             self.actor.b_sigma.assign(b_sigma)])
+        self.actor.set_weight(w_mu, b_mu, w_sigma, b_sigma)
 
-        self.critic.sess.run([self.critic.w2.assign(w2),
-                              self.critic.b2.assign(b2)])
+        self.critic.set_weight(w2, b2)
 
 class Replay_Memory():
 
@@ -300,6 +295,7 @@ def main(args):
         student_network_lst.append(StudentAgent(
             num_observation, num_action, actor_lr, critic_lr, action_low, action_high))
 
+    # Train multitask network
     loss = 0
     for idx_update in range(num_update):
         for idx in range(num_env):
@@ -328,6 +324,45 @@ def main(args):
                 print(student_network.actor.test(env, idx_update))
                 env.close()
                 loss = 0
+
+    # Transfer learning
+
+    idx = 0
+
+    env = gym.make(environment_name_lst[idx])
+
+    a2c = A2C(env, 1e-4, 1e-3, 5000000, 100, False)
+
+    w_mu, b_mu, w_sigma, b_sigma = student_network_lst[idx].actor.get_weight()
+
+    w2, b2 = student_network_lst[idx].critic.get_weight()
+
+    a2c.actor_model.set_weight(w_mu, b_mu, w_sigma, b_sigma)
+
+    a2c.critic_model.set_weight(w2, b2)
+
+    a2c.train()
+
+    # env = gym.make(environment_name_lst[0])
+    # num_action = env.action_space.shape[0]
+    # num_observation = env.observation_space.shape[0]
+    # action_high = env.action_space.high
+    # action_low = env.action_space.low
+
+    # s = StudentAgent(num_observation, num_action, actor_lr, critic_lr, action_low, action_high)
+
+    # print(s.actor.test(env, 0))
+
+    # w1, b1, w_mu, b_mu, w_sigma, b_sigma, w2, b2 = student_network_lst[0].get_weight()
+    # s.set_weight(w1, b1, w_mu, b_mu, w_sigma, b_sigma, w2, b2)
+
+    # print(s.actor.test(env, 0))
+
+
+    # env.close()
+
+
+
 
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 ENVIROMENT = 'InvertedPendulum-v2'
 
+
 class A2C(object):
     # Implementation of N-step Advantage Actor Critic.
     # This class inherits the Reinforce class, so for example, you can reuse
@@ -18,14 +19,13 @@ class A2C(object):
 
     def __init__(self,
                  env,
-                 model_config_path,
                  actor_lr,
                  critic_lr,
                  num_episodes,
                  N_step=20,
                  render=False,
                  discount_factor=1,
-                 model_step = None):
+                 model_step=None):
         # Initializes A2C.
         # Args:
         # - model: The actor model.
@@ -47,12 +47,12 @@ class A2C(object):
 
         # model
         if model_step == None:
-            self.actor_model = Actor(num_observation, num_action, actor_lr, env.action_space.low, env.action_space.high)
+            self.actor_model = Actor(
+                num_observation, num_action, actor_lr, env.action_space.low, env.action_space.high)
             self.critic_model = Critic(num_observation, critic_lr)
         else:
-            self.load_models(num_observation, num_action, actor_lr, critic_lr, env.action_space.low, env.action_space.high, model_step)
-
-
+            self.load_models(num_observation, num_action, actor_lr, critic_lr,
+                             env.action_space.low, env.action_space.high, model_step)
 
     def train(self, gamma=1.0):
         # Trains the model on a single episode using A2C.
@@ -63,16 +63,17 @@ class A2C(object):
         self.gamma_N_step = gamma ** self.N_step
         for i in range(self.num_episodes):
             states, actions, rewards = self.actor_model.generate_episode(env=self.env,
-                                                             render=self.render)
-            R, G = self.episode_reward2G_Nstep(states=states, actions=actions, rewards=rewards, 
-                gamma=gamma, N_step=self.N_step, discount_factor=self.discount_factor)
+                                                                         render=self.render)
+            R, G = self.episode_reward2G_Nstep(states=states, actions=actions, rewards=rewards,
+                                               gamma=gamma, N_step=self.N_step, discount_factor=self.discount_factor)
             # print(np.vstack(G).shape)
-            self.actor_model.train(np.vstack(states), np.vstack(G), np.vstack(actions))
+            self.actor_model.train(
+                np.vstack(states), np.vstack(G), np.vstack(actions))
             self.critic_model.train(np.vstack(states), np.vstack(R))
 
             if (i % test_frequence == 0):
                 reward, std = self.actor_model.test(self.env, i)
-                file.write(str(reward)+" "+str(std)+"\n")
+                file.write(str(reward) + " " + str(std) + "\n")
                 print(reward, std)
                 if reward >= max_reward:
                     self.save_models(i)
@@ -81,7 +82,7 @@ class A2C(object):
         file.close()
 
     def episode_reward2G_Nstep(self, states, actions, rewards, gamma, N_step, discount_factor):
-        ## TODO
+        # TODO
         # how to get the output
         critic_output = self.critic_model.get_critics(states)
         num_total_step = len(rewards)
@@ -90,11 +91,14 @@ class A2C(object):
         R = [None] * num_total_step
         G = [None] * num_total_step
         for t in range(num_total_step - 1, -1, -1):
-            V_end = 0 if (t + N_step >= num_total_step) else critic_output[t + N_step]
+            V_end = 0 if (
+                t + N_step >= num_total_step) else critic_output[t + N_step]
             R[t] = (self.gamma_N_step) * V_end
             gamma_k = 1
             for k in range(N_step):
-                R[t] += discount_factor * (gamma_k) * (rewards[t + k] if (t + k < num_total_step) else 0)
+                R[t] += discount_factor * \
+                    (gamma_k) * (rewards[t + k]
+                                 if (t + k < num_total_step) else 0)
                 gamma_k *= gamma
             G[t] = R[t] - critic_output[t][0]
 
@@ -105,8 +109,11 @@ class A2C(object):
         self.critic_model.save_model(model_step)
 
     def load_models(self, num_observation, num_action, actor_lr, critic_lr, action_low, action_high, model_step):
-        self.actor_model = Actor(num_observation, num_action, actor_lr, action_low, action_high, model = "./models/actor/actor-"+str(model_step))
-        self.critic_model = Critic(num_observation, critic_lr, model = "./models/critic/critic-"+str(model_step))
+        self.actor_model = Actor(num_observation, num_action, actor_lr, action_low,
+                                 action_high, model="./models/actor/actor-" + str(model_step))
+        self.critic_model = Critic(
+            num_observation, critic_lr, model="./models/critic/critic-" + str(model_step))
+
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -135,27 +142,29 @@ def parse_arguments():
 
     return parser.parse_args()
 
+
 class Actor(object):
-    def __init__(self, num_observation, num_action, lr, action_low, action_high, model = None):
+
+    def __init__(self, num_observation, num_action, lr, action_low, action_high, model=None):
         self.num_observation = num_observation
         self.num_action = num_action
         self.learning_rate = lr
         self.action_low = action_low
         self.action_high = action_high
 
-
         if model != None:
             self.load_model(model)
         else:
             self.graph = tf.Graph()
-            self.sess = tf.Session(graph = self.graph)
+            self.sess = tf.Session(graph=self.graph)
             with self.graph.as_default():
                 self.create_mlp()
                 self.create_optimizer()
                 self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, G, actions):
-        self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.G: G, self.action: actions})
+        self.optimizer.run(session=self.sess, feed_dict={
+                           self.state_input: states, self.G: G, self.action: actions})
 
     def test(self, env, epc_idx, render=False):
         log_dir = './log'
@@ -201,13 +210,16 @@ class Actor(object):
         # Craete multilayer perceptron (one hidden layer with 20 units)
         self.hidden_units = 200
 
-        self.G = tf.placeholder(tf.float32, [None, 1], name = 'G')
-        self.action = tf.placeholder(tf.float32, [None, self.num_action], name = 'action')
+        self.G = tf.placeholder(tf.float32, [None, 1], name='G')
+        self.action = tf.placeholder(
+            tf.float32, [None, self.num_action], name='action')
 
-        self.w1 = self.create_weights([self.num_observation, self.hidden_units])
+        self.w1 = self.create_weights(
+            [self.num_observation, self.hidden_units])
         self.b1 = self.create_bias([self.hidden_units])
 
-        self.state_input = tf.placeholder(tf.float32, [None, self.num_observation], name = "state_input")
+        self.state_input = tf.placeholder(
+            tf.float32, [None, self.num_observation], name="state_input")
 
         h_layer = tf.nn.relu(tf.matmul(self.state_input, self.w1) + self.b1)
 
@@ -215,53 +227,59 @@ class Actor(object):
         self.b_mu = self.create_bias([self.num_action])
         self.mu = tf.nn.tanh(tf.add(tf.matmul(h_layer, self.w_mu), self.b_mu))
 
-        self.w_sigma = self.create_weights([self.hidden_units, self.num_action])
+        self.w_sigma = self.create_weights(
+            [self.hidden_units, self.num_action])
         self.b_sigma = self.create_bias([self.num_action])
-        self.sigma = tf.nn.softplus(tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma))
+        self.sigma = tf.nn.softplus(
+            tf.add(tf.matmul(h_layer, self.w_sigma), self.b_sigma))
 
-        self.mu = tf.multiply(self.mu, self.action_high, name = "mu")
-        self.sigma = tf.add(self.sigma, 1e-4, name = "sigma")
+        self.mu = tf.multiply(self.mu, self.action_high, name="mu")
+        self.sigma = tf.add(self.sigma, 1e-4, name="sigma")
         # self.mu, self.sigma = self.mu * self.action_high, self.sigma + 1e-4
 
-        self.normal_dist = tf.distributions.Normal(loc=self.mu, scale=self.sigma)
-        self.act_out = tf.reshape(self.normal_dist.sample(1), shape=[-1, self.num_action])
-        self.act_out = tf.clip_by_value(self.act_out, self.action_low, self.action_high, name = "act_out")
+        self.normal_dist = tf.distributions.Normal(
+            loc=self.mu, scale=self.sigma)
+        self.act_out = tf.reshape(
+            self.normal_dist.sample(1), shape=[-1, self.num_action])
+        self.act_out = tf.clip_by_value(
+            self.act_out, self.action_low, self.action_high, name="act_out")
 
-        return self.mu,self.sigma,self.act_out
+        return self.mu, self.sigma, self.act_out
 
     def create_weights(self, shape):
-        initial = tf.truncated_normal(shape, stddev = 0.1)
+        initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
 
     def create_bias(self, shape):
-        initial = tf.constant(0.1, shape = shape)
+        initial = tf.constant(0.1, shape=shape)
         return tf.Variable(initial)
 
     def create_optimizer(self):
         # Using Adam to minimize the error between target and evaluation
         logprobs = self.normal_dist.log_prob(self.action)
         entropy = self.normal_dist.entropy()
-        cost = tf.reduce_mean(-logprobs * self.G - 0.01*entropy)
+        cost = tf.reduce_mean(-logprobs * self.G - 0.01 * entropy)
 
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
+        self.optimizer = tf.train.AdamOptimizer(
+            self.learning_rate).minimize(cost, name="optimizer")
 
     def get_action(self, state):
-        return self.act_out.eval(session = self.sess, feed_dict={self.state_input: [state]})[0]
+        return self.act_out.eval(session=self.sess, feed_dict={self.state_input: [state]})[0]
 
-    def get_action_set(self,state):
-        return self.sess.run([self.act_out,self.mu,self.sigma],feed_dict={self.state_input:state})
+    def get_action_set(self, state):
+        return self.sess.run([self.act_out, self.mu, self.sigma], feed_dict={self.state_input: state})
 
     def save_model(self, step):
         # Helper function to save your model.
         with self.graph.as_default():
             saver = tf.train.Saver()
         self.sess.graph.add_to_collection("optimizer", self.optimizer)
-        saver.save(self.sess, "./models/actor/actor", global_step = step)
+        saver.save(self.sess, "./models/actor/actor", global_step=step)
 
     def load_model(self, model_file):
         # Helper function to load an existing model.
         self.graph = tf.Graph()
-        self.sess = tf.Session(graph = self.graph)
+        self.sess = tf.Session(graph=self.graph)
         with self.graph.as_default():
             saver = tf.train.import_meta_graph(model_file + '.meta')
             saver.restore(self.sess, model_file)
@@ -272,8 +290,22 @@ class Actor(object):
         self.state_input = self.graph.get_tensor_by_name("state_input:0")
         self.optimizer = self.graph.get_collection("optimizer")[0]
 
+    def get_weight(self):
+        w_mu, b_mu, w_sigma, b_sigma = self.sess.run(
+            [self.w_mu, self.b_mu, self.w_sigma, self.b_sigma])
+
+        return w_mu, b_mu, w_sigma, b_sigma
+
+    def set_weight(self, w_mu, b_mu, w_sigma, b_sigma):
+        self.sess.run([self.w_mu.assign(w_mu),
+                       self.b_mu.assign(b_mu),
+                       self.w_sigma.assign(w_sigma),
+                       self.b_sigma.assign(b_sigma)])
+
+
 class Critic(object):
-    def __init__(self, num_observation, lr, model = None):
+
+    def __init__(self, num_observation, lr, model=None):
         # define the network for the critic
         self.num_observation = num_observation
         self.learning_rate = lr
@@ -282,59 +314,66 @@ class Critic(object):
             self.load_model(model)
         else:
             self.graph = tf.Graph()
-            self.sess = tf.Session(graph = self.graph)
+            self.sess = tf.Session(graph=self.graph)
             with self.graph.as_default():
                 self.create_mlp()
                 self.create_optimizer()
                 self.sess.run(tf.global_variables_initializer())
 
     def train(self, states, R):
-        self.optimizer.run(session=self.sess, feed_dict={self.state_input: states, self.target_q_value: R})
+        self.optimizer.run(session=self.sess, feed_dict={
+                           self.state_input: states, self.target_q_value: R})
 
     def create_mlp(self):
         # Craete multilayer perceptron (one hidden layer with 20 units)
         self.hidden_units = 20
 
-        self.w1 = self.create_weights([self.num_observation, self.hidden_units])
+        self.w1 = self.create_weights(
+            [self.num_observation, self.hidden_units])
         self.b1 = self.create_bias([self.hidden_units])
 
-        self.state_input = tf.placeholder(tf.float32, [None, self.num_observation], name = "state_input")
+        self.state_input = tf.placeholder(
+            tf.float32, [None, self.num_observation], name="state_input")
 
         h_layer = tf.nn.relu(tf.matmul(self.state_input, self.w1) + self.b1)
 
         self.w2 = self.create_weights([self.hidden_units, 1])
         self.b2 = self.create_bias([1])
-        self.q_values = tf.add(tf.matmul(h_layer, self.w2), self.b2, name = "q_values")
+        self.q_values = tf.add(
+            tf.matmul(h_layer, self.w2), self.b2, name="q_values")
         return self.q_values
 
     def create_weights(self, shape):
-        initial = tf.truncated_normal(shape, stddev = 0.1)
+        initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
 
     def create_bias(self, shape):
-        initial = tf.constant(0.1, shape = shape)
+        initial = tf.constant(0.1, shape=shape)
         return tf.Variable(initial)
 
     def create_optimizer(self):
         # Using Adam to minimize the error between target and evaluation
-        self.target_q_value = tf.placeholder(tf.float32, [None, 1], name = "target_q_value")
-        cost = tf.reduce_mean(tf.square(tf.subtract(self.target_q_value, self.q_values)))
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(cost, name = "optimizer")
+        self.target_q_value = tf.placeholder(
+            tf.float32, [None, 1], name="target_q_value")
+        cost = tf.reduce_mean(
+            tf.square(tf.subtract(self.target_q_value, self.q_values)))
+        self.optimizer = tf.train.AdamOptimizer(
+            self.learning_rate).minimize(cost, name="optimizer")
 
     def get_critics(self, states):
-        return self.q_values.eval(session = self.sess, feed_dict={self.state_input: states})
+        return self.q_values.eval(session=self.sess, feed_dict={self.state_input: states})
 
     def save_model(self, step):
         # Helper function to save your model.
         with self.graph.as_default():
             saver = tf.train.Saver()
         self.sess.graph.add_to_collection("optimizer", self.optimizer)
-        saver.save(self.sess, "./models/critic/critic", global_step = step)
+        saver.save(self.sess, "./models/critic/critic", global_step=step)
 
     def load_model(self, model_file):
         # Helper function to load an existing model.
         self.graph = tf.Graph()
-        self.sess = tf.Session(graph = self.graph)
+        self.sess = tf.Session(graph=self.graph)
         with self.graph.as_default():
             saver = tf.train.import_meta_graph(model_file + '.meta')
             saver.restore(self.sess, model_file)
@@ -344,7 +383,18 @@ class Critic(object):
         self.target_q_value = self.graph.get_tensor_by_name("target_q_value:0")
         self.optimizer = self.graph.get_collection("optimizer")[0]
 
+    def get_weight(self):
+        w2, b2 = self.sess.run([self.w2, self.b2])
+
+        return w2, b2
+
+    def set_weight(self, w2, b2):
+        self.sess.run([self.w2.assign(w2),
+                       self.b2.assign(b2)])
+
 from tensorflow.core.framework import summary_pb2
+
+
 def summary_var(log_dir, name, val, step):
     writer = tf.summary.FileWriterCache.get(log_dir)
     summary_proto = summary_pb2.Summary()
@@ -353,6 +403,7 @@ def summary_var(log_dir, name, val, step):
     value.simple_value = float(val)
     writer.add_summary(summary_proto, step)
     writer.flush()
+
 
 def main(args):
     # Parse command-line arguments.
@@ -366,8 +417,9 @@ def main(args):
 
     # Create the environment.
     env = gym.make(ENVIROMENT)
-    
-    a2c = A2C(env, model_config_path, lr, critic_lr, num_episodes, N_step, render)# model_step = 1200)
+
+    a2c = A2C(env, lr, critic_lr, num_episodes,
+              N_step, render)  # model_step = 1200)
 
     a2c.train()
     # print(a2c.test(0, True))
