@@ -69,6 +69,22 @@ class StudentAgent(object):
                                                                         self.target_mu: mu,
                                                                         self.target_sigma: sigma})
 
+    def get_weight(self):
+        w_mu, b_mu, w_sigma, b_sigma = self.actor.sess.run(
+            [self.actor.w_mu, self.actor.b_mu, self.actor.w_sigma, self.actor.b_sigma])
+
+        w2, b2 = self.critic.sess.run([self.critic.w2, self.critic.b2])
+
+        return w_mu, b_mu, w_sigma, b_sigma, w2, b2
+
+    def set_weight(self, w_mu, b_mu, w_sigma, b_sigma, w2, b2):
+        self.actor.sess.run([self.actor.w_mu.assign(w_mu),
+                             self.actor.b_mu.assign(b_mu),
+                             self.actor.w_sigma.assign(w_sigma),
+                             self.actor.b_sigma.assign(b_sigma)])
+
+        self.critic.sess.run([self.critic.w2.assign(w2),
+                              self.critic.b2.assign(b2)])
 
 class Replay_Memory():
 
@@ -172,7 +188,6 @@ class ExpertAgent():
     def get_next_state(self, action, env):
         # given the action, return next state, reward, done and info
         next_state, reward, done, info = env.step(action)
-        # return np.array([next_state]), reward, done, info
         return next_state, reward, done, info
 
     def get_target(self, state):
@@ -246,16 +261,12 @@ def main(args):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    num_update = 10000000
+    num_update = 2000
 
-    # , "InvertedDoublePendulum-v2"]
     environment_name_lst = ["InvertedPendulum-v2", "InvertedDoublePendulum-v2"]
-    model_dir_lst = ["./expert_mujoco/InvertedPendulum-v2", "./expert_mujoco/InvertedDoublePendulum-v2"]
+    model_dir_lst = ["./expert_mujoco/InvertedPendulum-v2",
+                     "./expert_mujoco/InvertedDoublePendulum-v2"]
     model_step_lst = [1400, 16400]
-
-    # environment_name_lst = ["InvertedDoublePendulum-v2"]
-    # model_dir_lst = ["./expert_mujoco/InvertedDoublePendulum-v2"]
-    # model_step_lst = [16400]
 
     teacher_agent_lst = []
     student_network_lst = []
@@ -296,39 +307,28 @@ def main(args):
             student_network = student_network_lst[idx]
 
             batch_state_lst, batch_mu_lst, batch_sigma_lst, batch_q_values_lst = teacher_agent.teach()
-            # print(np.asarray(batch_state_lst).shape)
-            # print(np.asarray(batch_mu_lst).shape)
 
             student_network.train(
                 batch_state_lst, batch_mu_lst, batch_sigma_lst, batch_q_values_lst)
 
             # TODO
-            # loss += student_network.get_actor_mimic_cost(batch_state_lst, batch_q_values_lst)
-            loss += student_network.get_actor_loss(batch_state_lst, batch_mu_lst, batch_sigma_lst)
+            # loss += student_network.get_actor_loss(batch_state_lst, batch_mu_lst, batch_sigma_lst)
 
             next_student_network_idx = (idx + 1) % num_env
             next_student_network = student_network_lst[
                 next_student_network_idx]
 
-            # TODO
-            # w, b = student_network.get_weight()
-            # next_student_network.set_weight(w, b)
+            # Share weights
+            w_mu, b_mu, w_sigma, b_sigma, w2, b2 = student_network.get_weight()
+            next_student_network.set_weight(w_mu, b_mu, w_sigma, b_sigma, w2, b2)
 
             if ((idx_update % frequency_report_loss) == 0):
-                print(loss / frequency_report_loss)
-                # student_network.save_model("./" + environment_name_lst[idx], idx_update)
-                # student_agent = DQN_Agent(environment_name_lst[idx],
-                # 						   network_name='mlp',
-                # 						   logger=logger,
-                # 						   # model= "./" + environment_name_lst[idx]+"-"+str(idx_update),
-                # 						   train_model=0,
-                # 						   teach_model=1,
-                # 						   burn_in=0)
-                # student_agent.q_network = student_network
+                # print(loss / frequency_report_loss)
                 env = gym.make(environment_name_lst[idx])
                 print(student_network.actor.test(env, idx_update))
                 env.close()
                 loss = 0
+
 
 if __name__ == '__main__':
     main(sys.argv)
