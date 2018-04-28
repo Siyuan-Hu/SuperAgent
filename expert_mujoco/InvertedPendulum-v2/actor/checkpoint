@@ -1,2 +1,2 @@
-model_checkpoint_path: "actor-1400"
-all_model_checkpoint_paths: "actor-1400"
+model_checkpoint_path: "actor-1800"
+all_model_checkpoint_paths: "actor-1800"
