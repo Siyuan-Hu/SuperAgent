@@ -43,8 +43,6 @@ class A2C(object):
         self.render = render
         self.discount_factor = discount_factor
 
-        self.env = gym.make(ENVIROMENT)
-
         # model
         if model_step == None:
             self.actor_model = Actor(
